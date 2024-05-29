@@ -9,7 +9,7 @@
           integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A=="
           crossorigin="anonymous" referrerpolicy="no-referrer"/>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
-    <link href="/index.css" rel="stylesheet">
+    <link href="/assets/index.css" rel="stylesheet">
     <style>
         .htmx-swapping > .fade-day-out {
             transform: rotate3d(0, 1, 0, 90deg);
@@ -22,9 +22,9 @@
     </style>
 </head>
 <body class="w-dvw h-dvh perspective-1000">
-<div hx-swap="swap:500ms" class="fade-calendar-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 rounded-lg bg-black shadow-2xl rotate-y-0 duration-1000 backface-hidden">
+<div data-testid="calendar" hx-swap="swap:500ms" class="fade-calendar-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 rounded-lg bg-black shadow-2xl rotate-y-0 duration-1000 backface-hidden">
     <div class="p-3 grid grid-cols-7 grid-rows-5">
-        <a hx-boost="true" href="/calendar/src/main/resources/day/1.html"><div class="day-ready">1</div></a>
+        <a data-testid="day-1" hx-boost="true" href="/day/1"><div class="day-ready">1</div></a>
         <div class="day-closed">2</div>
         <div class="day-opened">3</div>
     </div>
