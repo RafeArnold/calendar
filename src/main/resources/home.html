@@ -24,9 +24,9 @@
 <body class="w-dvw h-dvh perspective-1000">
 <div data-testid="calendar" hx-swap="swap:500ms" class="fade-calendar-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 rounded-lg bg-black shadow-2xl rotate-y-0 duration-1000 backface-hidden">
     <div class="p-3 grid grid-cols-7 grid-rows-5">
-        <a data-testid="day-1" hx-boost="true" href="/day/1"><div class="day-ready">1</div></a>
-        <div class="day-closed">2</div>
-        <div class="day-opened">3</div>
+        <a data-testid="day-1" hx-boost="true" href="/day/{{ model.datePrefix }}01"><div class="day-ready">1</div></a>
+        <a data-testid="day-13" hx-boost="true" href="/day/{{ model.datePrefix }}13"><div class="day-closed">13</div></a>
+        <a data-testid="day-27" hx-boost="true" href="/day/{{ model.datePrefix }}27"><div class="day-opened">27</div></a>
     </div>
 </div>
 </body>

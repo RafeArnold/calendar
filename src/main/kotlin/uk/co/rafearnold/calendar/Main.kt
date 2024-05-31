@@ -9,10 +9,13 @@ import org.http4k.core.Filter
 import org.http4k.core.Method.GET
 import org.http4k.core.Response
 import org.http4k.core.Status
+import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.then
 import org.http4k.core.with
 import org.http4k.lens.BiDiBodyLens
+import org.http4k.lens.Path
+import org.http4k.lens.localDate
 import org.http4k.routing.ResourceLoader
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
@@ -27,17 +30,23 @@ import org.http4k.template.viewModel
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.StringWriter
+import java.time.Clock
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 val logger: Logger = LoggerFactory.getLogger("main")
 
 fun main() {
-    startServer("something sweet").block()
+    startServer { "something sweet" }.block()
 }
 
-fun startServer(dayText: String): Http4kServer {
+fun startServer(
+    clock: Clock = Clock.systemUTC(),
+    messageLoader: MessageLoader,
+): Http4kServer {
     val templateRenderer = PebbleTemplateRenderer()
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
-    val router = routes(Assets(), Index(view), Day(view, dayText))
+    val router = routes(Assets(), Index(view, clock), Day(view, messageLoader))
     val app =
         Filter { next ->
             {
@@ -55,20 +64,35 @@ fun startServer(dayText: String): Http4kServer {
     return server
 }
 
+fun interface MessageLoader {
+    operator fun get(date: LocalDate): String?
+}
+
 class Assets(
     loader: ResourceLoader = ResourceLoader.Directory("src/main/resources/assets"),
 ) : RoutingHttpHandler by static(loader).withBasePath("/assets")
 
 class Index(
     view: BiDiBodyLens<ViewModel>,
-) : RoutingHttpHandler by "/" bind GET to { Response(OK).with(view of HomeViewModel) }
+    clock: Clock,
+) : RoutingHttpHandler by "/" bind GET to {
+    val viewModel = HomeViewModel(datePrefix = clock.instant().atZone(clock.zone).format(datePrefixFormatter))
+    Response(OK).with(view of viewModel)
+}
+
+val datePrefixFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-")
 
 class Day(
     view: BiDiBodyLens<ViewModel>,
-    text: String,
-) : RoutingHttpHandler by "/day/1" bind GET to { Response(OK).with(view of DayViewModel(text = text)) }
+    messageLoader: MessageLoader,
+) : RoutingHttpHandler by "/day/{date}" bind GET to {
+    val date = Path.localDate().of("date")(it)
+    val message = messageLoader[date]
+    if (message != null) Response(OK).with(view of DayViewModel(text = message)) else Response(NOT_FOUND)
+}
 
-object HomeViewModel : ViewModel {
+@Suppress("unused")
+class HomeViewModel(val datePrefix: String) : ViewModel {
     override fun template(): String = "home"
 }
 
