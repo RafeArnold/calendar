@@ -76,9 +76,9 @@ class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
 ) : RoutingHttpHandler by "/" bind GET to {
-    val viewModel = HomeViewModel(datePrefix = clock.instant().atZone(clock.zone).format(datePrefixFormatter))
-    Response(OK).with(view of viewModel)
-}
+        val viewModel = HomeViewModel(datePrefix = clock.instant().atZone(clock.zone).format(datePrefixFormatter))
+        Response(OK).with(view of viewModel)
+    }
 
 val datePrefixFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-")
 
@@ -86,10 +86,10 @@ class Day(
     view: BiDiBodyLens<ViewModel>,
     messageLoader: MessageLoader,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
-    val date = Path.localDate().of("date")(it)
-    val message = messageLoader[date]
-    if (message != null) Response(OK).with(view of DayViewModel(text = message)) else Response(NOT_FOUND)
-}
+        val date = Path.localDate().of("date")(it)
+        val message = messageLoader[date]
+        if (message != null) Response(OK).with(view of DayViewModel(text = message)) else Response(NOT_FOUND)
+    }
 
 @Suppress("unused")
 class HomeViewModel(val datePrefix: String) : ViewModel {
