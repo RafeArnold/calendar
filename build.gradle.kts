@@ -4,9 +4,12 @@ plugins {
     kotlin("jvm") version "1.9.23"
     id("org.jmailen.kotlinter") version "4.2.0"
     id("com.github.node-gradle.node") version "7.0.2"
+    application
 }
 
 group = "uk.co.rafearnold"
+
+application.mainClass = "uk.co.rafearnold.calendar.MainKt"
 
 repositories {
     mavenCentral()
