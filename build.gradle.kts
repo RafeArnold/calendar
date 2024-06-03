@@ -43,7 +43,6 @@ tasks.check {
 
 tasks.processResources {
     dependsOn("buildCss")
-    exclude("input.css")
 }
 
 task("buildCss", NpxTask::class) {

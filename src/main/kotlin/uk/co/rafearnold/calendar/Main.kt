@@ -93,11 +93,16 @@ class Day(
 
 @Suppress("unused")
 class HomeViewModel(val datePrefix: String) : ViewModel {
+    private val rotated: Boolean = false
+
     override fun template(): String = "home"
 }
 
+@Suppress("unused")
 class DayViewModel(val text: String) : ViewModel {
-    override fun template(): String = "day"
+    val rotated: Boolean = true
+
+    override fun template(): String = "calendar"
 }
 
 class PebbleTemplateRenderer(

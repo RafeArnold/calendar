@@ -97,7 +97,6 @@ private fun Page.clickDay(dayNum: Int) {
     assertThat(dayText()).not().isVisible()
     assertThat(day(dayNum)).hasText(dayNum.toString())
     day(dayNum).click()
-    assertThat(calendar()).not().isVisible()
     assertThat(dayText()).isVisible()
 }
 
