@@ -44,7 +44,7 @@ class EndToEndTests {
     @Test
     fun `navigate from calendar to a day and back to calendar`() {
         val dayText = "something sweet"
-        server = startServer { dayText }
+        server = startServer(port = 0) { dayText }
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)
@@ -67,7 +67,7 @@ class EndToEndTests {
                     LocalDate.of(2024, 5, 27) to message3,
                 ),
             )
-        server = startServer(clock, messageLoader)
+        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)

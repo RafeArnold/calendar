@@ -41,6 +41,7 @@ fun main() {
 }
 
 fun startServer(
+    port: Int = 8080,
     clock: Clock = Clock.systemUTC(),
     messageLoader: MessageLoader,
 ): Http4kServer {
@@ -59,7 +60,7 @@ fun startServer(
                 }
             }
         }.then(router)
-    val server = app.asServer(Jetty(port = 8080)).start()
+    val server = app.asServer(Jetty(port = port)).start()
     logger.info("Server started")
     return server
 }
