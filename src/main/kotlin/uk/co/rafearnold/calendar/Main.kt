@@ -77,7 +77,9 @@ class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
 ) : RoutingHttpHandler by "/" bind GET to {
-        val viewModel = HomeViewModel(datePrefix = clock.instant().atZone(clock.zone).format(datePrefixFormatter))
+        val date = clock.instant().atZone(clock.zone).toLocalDate()
+        val viewModel =
+            HomeViewModel(datePrefix = date.format(datePrefixFormatter), currentMonthDayCount = date.lengthOfMonth())
         Response(OK).with(view of viewModel)
     }
 
@@ -89,18 +91,23 @@ class Day(
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
         val date = Path.localDate().of("date")(it)
         val message = messageLoader[date]
-        if (message != null) Response(OK).with(view of DayViewModel(text = message)) else Response(NOT_FOUND)
+        if (message != null) {
+            val viewModel = DayViewModel(text = message, currentMonthDayCount = date.lengthOfMonth())
+            Response(OK).with(view of viewModel)
+        } else {
+            Response(NOT_FOUND)
+        }
     }
 
 @Suppress("unused")
-class HomeViewModel(val datePrefix: String) : ViewModel {
+class HomeViewModel(val datePrefix: String, val currentMonthDayCount: Int) : ViewModel {
     private val rotated: Boolean = false
 
     override fun template(): String = "home"
 }
 
 @Suppress("unused")
-class DayViewModel(val text: String) : ViewModel {
+class DayViewModel(val text: String, val currentMonthDayCount: Int) : ViewModel {
     val rotated: Boolean = true
 
     override fun template(): String = "calendar"
