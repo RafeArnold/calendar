@@ -129,6 +129,28 @@ class EndToEndTests {
         page.clickDay(1)
         page.assertThatDayTextIs(text = message4)
     }
+
+    @Test
+    fun `trailing and following dates of the surrounding months are displayed`() {
+        val clock = MutableClock(Clock.systemUTC())
+        server = startServer(port = 0, clock = clock) { "whatever" }
+        val page = browser.newPage()
+
+        clock.del = LocalDate.of(2024, 5, Random.nextInt(1, 32)).toClock()
+        page.navigateHome(server.port())
+        page.assertDisplayedDaysOfPreviousMonthAre((29..30).toList())
+        page.assertDisplayedDaysOfNextMonthAre((1..2).toList())
+
+        clock.del = LocalDate.of(2024, 6, Random.nextInt(1, 31)).toClock()
+        page.navigateHome(server.port())
+        page.assertDisplayedDaysOfPreviousMonthAre((27..31).toList())
+        page.assertDisplayedDaysOfNextMonthAre(emptyList())
+
+        clock.del = LocalDate.of(2023, 5, Random.nextInt(1, 32)).toClock()
+        page.navigateHome(server.port())
+        page.assertDisplayedDaysOfPreviousMonthAre(emptyList())
+        page.assertDisplayedDaysOfNextMonthAre((1..4).toList())
+    }
 }
 
 private fun LocalDate.toClock(): Clock =
@@ -149,8 +171,22 @@ private fun Page.navigateHome(port: Int) {
     assertThat(calendar()).isVisible()
 }
 
+private fun Page.assertDisplayedDaysOfPreviousMonthAre(nums: List<Int>) {
+    val nextMonthDays = getByTestId(Pattern.compile("^prev-month-day-\\d{1,2}$"))
+    assertThat(nextMonthDays).hasCount(nums.size)
+    assertThat(nextMonthDays).hasText(nums.map { it.toString() }.toTypedArray())
+}
+
+private fun Page.assertDisplayedDaysOfNextMonthAre(nums: List<Int>) {
+    val nextMonthDays = getByTestId(Pattern.compile("^next-month-day-\\d{1,2}$"))
+    assertThat(nextMonthDays).hasCount(nums.size)
+    assertThat(nextMonthDays).hasText(nums.map { it.toString() }.toTypedArray())
+}
+
 private fun Page.assertNumOfDaysInCurrentMonthIs(num: Int) {
-    assertThat(getByTestId(Pattern.compile("^day-\\d{1,2}$"))).hasCount(num)
+    val days = getByTestId(Pattern.compile("^day-\\d{1,2}$"))
+    assertThat(days).hasCount(num)
+    assertThat(days).hasText((1..num).map { it.toString() }.toTypedArray())
 }
 
 private fun Page.assertThatDayTextIs(text: String) {

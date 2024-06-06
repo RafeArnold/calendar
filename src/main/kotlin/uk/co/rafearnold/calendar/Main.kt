@@ -79,7 +79,12 @@ class Index(
 ) : RoutingHttpHandler by "/" bind GET to {
         val date = clock.instant().atZone(clock.zone).toLocalDate()
         val viewModel =
-            HomeViewModel(datePrefix = date.format(datePrefixFormatter), currentMonthDayCount = date.lengthOfMonth())
+            HomeViewModel(
+                datePrefix = date.format(datePrefixFormatter),
+                currentMonthDayCount = date.lengthOfMonth(),
+                previousMonthDays = date.previousMonthDays(),
+                nextMonthDays = date.nextMonthDays(),
+            )
         Response(OK).with(view of viewModel)
     }
 
@@ -92,22 +97,50 @@ class Day(
         val date = Path.localDate().of("date")(it)
         val message = messageLoader[date]
         if (message != null) {
-            val viewModel = DayViewModel(text = message, currentMonthDayCount = date.lengthOfMonth())
+            val viewModel =
+                DayViewModel(
+                    text = message,
+                    currentMonthDayCount = date.lengthOfMonth(),
+                    previousMonthDays = date.previousMonthDays(),
+                    nextMonthDays = date.nextMonthDays(),
+                )
             Response(OK).with(view of viewModel)
         } else {
             Response(NOT_FOUND)
         }
     }
 
+private fun LocalDate.previousMonthDays(): List<Int> {
+    val previousMonthDaysCount = withDayOfMonth(1).dayOfWeek.value - 1
+    val previousMonth = minusMonths(1)
+    val previousMonthLength = previousMonth.lengthOfMonth()
+    return ((previousMonthLength - previousMonthDaysCount + 1)..previousMonthLength).toList()
+}
+
+private fun LocalDate.nextMonthDays(): List<Int> {
+    val nextMonthDaysCount = 7 - withDayOfMonth(lengthOfMonth()).dayOfWeek.value
+    return (1..nextMonthDaysCount).toList()
+}
+
 @Suppress("unused")
-class HomeViewModel(val datePrefix: String, val currentMonthDayCount: Int) : ViewModel {
+class HomeViewModel(
+    val datePrefix: String,
+    val currentMonthDayCount: Int,
+    val previousMonthDays: List<Int>,
+    val nextMonthDays: List<Int>,
+) : ViewModel {
     private val rotated: Boolean = false
 
     override fun template(): String = "home"
 }
 
 @Suppress("unused")
-class DayViewModel(val text: String, val currentMonthDayCount: Int) : ViewModel {
+class DayViewModel(
+    val text: String,
+    val currentMonthDayCount: Int,
+    val previousMonthDays: List<Int>,
+    val nextMonthDays: List<Int>,
+) : ViewModel {
     val rotated: Boolean = true
 
     override fun template(): String = "calendar"

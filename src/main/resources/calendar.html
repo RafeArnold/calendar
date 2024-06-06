@@ -1,8 +1,14 @@
 <div id="calendar-wrapper" class="perspective-1000 relative">
     <div id="calendar" data-testid="calendar" class="{% if model.rotated %}rotate-y-180 [.htmx-swapping_>_&]:rotate-y-0{% endif %} duration-1000 ease-in-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 rounded-lg bg-black shadow-2xl backface-hidden">
         <div class="p-3 grid grid-cols-7 grid-rows-5">
+            {% for i in model.previousMonthDays %}
+            <div data-testid="prev-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
+            {% endfor %}
             {% for i in range(1, model.currentMonthDayCount) %}
             <button data-testid="day-{{ i }}" hx-get="/day/{{ model.datePrefix }}{{ i | numberformat('00') }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML"><div class="day-ready">{{ i }}</div></button>
+            {% endfor %}
+            {% for i in model.nextMonthDays %}
+            <div data-testid="next-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
             {% endfor %}
         </div>
     </div>

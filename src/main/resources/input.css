@@ -15,4 +15,7 @@
     .day-ready {
         @apply day-base border-2;
     }
+    .day-other-month {
+        @apply day-base bg-gray-500 text-gray-700;
+    }
 }
