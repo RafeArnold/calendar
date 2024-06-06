@@ -194,6 +194,34 @@ class EndToEndTests {
         page.clickDay(1)
         page.assertThatDayTextIs(text = message4)
     }
+
+    @Test
+    fun `back button navigates to month of current date`() {
+        val clock = MutableClock(LocalDate.EPOCH.toClock())
+        server = startServer(port = 0, clock = clock) { "whatever" }
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 5))
+        page.clickDay(1)
+        page.clickBack()
+        page.assertNumOfDaysInCurrentMonthIs(31)
+        page.assertDisplayedDaysOfPreviousMonthAre((29..30).toList())
+        page.assertDisplayedDaysOfNextMonthAre((1..2).toList())
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 6))
+        page.clickDay(1)
+        page.clickBack()
+        page.assertNumOfDaysInCurrentMonthIs(30)
+        page.assertDisplayedDaysOfPreviousMonthAre((27..31).toList())
+        page.assertDisplayedDaysOfNextMonthAre(emptyList())
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2023, 5))
+        page.clickDay(1)
+        page.clickBack()
+        page.assertNumOfDaysInCurrentMonthIs(31)
+        page.assertDisplayedDaysOfPreviousMonthAre(emptyList())
+        page.assertDisplayedDaysOfNextMonthAre((1..4).toList())
+    }
 }
 
 private fun LocalDate.toClock(): Clock =

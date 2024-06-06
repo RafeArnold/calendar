@@ -96,7 +96,13 @@ class Day(
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         val message = messageLoader[date]
         if (message != null) {
-            Response(OK).with(view of DayViewModel(text = message, calendarBaseModel = date.toCalendarModel()))
+            val viewModel =
+                DayViewModel(
+                    text = message,
+                    backLink = "/?month=" + monthFormatter.format(date),
+                    calendarBaseModel = date.toCalendarModel(),
+                )
+            Response(OK).with(view of viewModel)
         } else {
             Response(NOT_FOUND)
         }
@@ -137,6 +143,7 @@ class HomeViewModel(calendarBaseModel: CalendarBaseModel) : ViewModel, CalendarB
 @Suppress("unused")
 class DayViewModel(
     val text: String,
+    val backLink: String,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     val rotated: Boolean = true
