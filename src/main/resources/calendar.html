@@ -4,8 +4,8 @@
             {% for i in model.previousMonthDays %}
             <div data-testid="prev-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
             {% endfor %}
-            {% for i in range(1, model.currentMonthDayCount) %}
-            <button data-testid="day-{{ i }}" hx-get="/day/{{ model.datePrefix }}{{ i | numberformat('00') }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML"><div class="day-ready">{{ i }}</div></button>
+            {% for day in model.days %}
+            <button data-testid="day-{{ loop.index + 1 }}" hx-get="{{ day }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="day-ready">{{ loop.index + 1 }}</button>
             {% endfor %}
             {% for i in model.nextMonthDays %}
             <div data-testid="next-month-day-{{ i }}" class="day-other-month">{{ i }}</div>

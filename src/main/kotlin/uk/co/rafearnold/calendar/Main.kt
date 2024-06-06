@@ -78,17 +78,8 @@ class Index(
     clock: Clock,
 ) : RoutingHttpHandler by "/" bind GET to {
         val date = clock.instant().atZone(clock.zone).toLocalDate()
-        val viewModel =
-            HomeViewModel(
-                datePrefix = date.format(datePrefixFormatter),
-                currentMonthDayCount = date.lengthOfMonth(),
-                previousMonthDays = date.previousMonthDays(),
-                nextMonthDays = date.nextMonthDays(),
-            )
-        Response(OK).with(view of viewModel)
+        Response(OK).with(view of HomeViewModel(calendarBaseModel = date.toCalendarModel()))
     }
-
-val datePrefixFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-")
 
 class Day(
     view: BiDiBodyLens<ViewModel>,
@@ -97,18 +88,20 @@ class Day(
         val date = Path.localDate().of("date")(it)
         val message = messageLoader[date]
         if (message != null) {
-            val viewModel =
-                DayViewModel(
-                    text = message,
-                    currentMonthDayCount = date.lengthOfMonth(),
-                    previousMonthDays = date.previousMonthDays(),
-                    nextMonthDays = date.nextMonthDays(),
-                )
-            Response(OK).with(view of viewModel)
+            Response(OK).with(view of DayViewModel(text = message, calendarBaseModel = date.toCalendarModel()))
         } else {
             Response(NOT_FOUND)
         }
     }
+
+fun LocalDate.toCalendarModel(): CalendarBaseModel {
+    val dayLinks = (1..lengthOfMonth()).map { "/day/" + withDayOfMonth(it).format(DateTimeFormatter.ISO_DATE) }
+    return object : CalendarBaseModel {
+        override val days: List<String> = dayLinks
+        override val previousMonthDays: List<Int> = previousMonthDays()
+        override val nextMonthDays: List<Int> = nextMonthDays()
+    }
+}
 
 private fun LocalDate.previousMonthDays(): List<Int> {
     val previousMonthDaysCount = withDayOfMonth(1).dayOfWeek.value - 1
@@ -123,12 +116,7 @@ private fun LocalDate.nextMonthDays(): List<Int> {
 }
 
 @Suppress("unused")
-class HomeViewModel(
-    val datePrefix: String,
-    val currentMonthDayCount: Int,
-    val previousMonthDays: List<Int>,
-    val nextMonthDays: List<Int>,
-) : ViewModel {
+class HomeViewModel(calendarBaseModel: CalendarBaseModel) : ViewModel, CalendarBaseModel by calendarBaseModel {
     private val rotated: Boolean = false
 
     override fun template(): String = "home"
@@ -137,13 +125,17 @@ class HomeViewModel(
 @Suppress("unused")
 class DayViewModel(
     val text: String,
-    val currentMonthDayCount: Int,
-    val previousMonthDays: List<Int>,
-    val nextMonthDays: List<Int>,
-) : ViewModel {
+    calendarBaseModel: CalendarBaseModel,
+) : ViewModel, CalendarBaseModel by calendarBaseModel {
     val rotated: Boolean = true
 
     override fun template(): String = "calendar"
+}
+
+interface CalendarBaseModel {
+    val days: List<String>
+    val previousMonthDays: List<Int>
+    val nextMonthDays: List<Int>
 }
 
 class PebbleTemplateRenderer(
