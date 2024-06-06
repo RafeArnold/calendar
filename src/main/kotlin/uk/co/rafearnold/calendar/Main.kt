@@ -15,7 +15,10 @@ import org.http4k.core.then
 import org.http4k.core.with
 import org.http4k.lens.BiDiBodyLens
 import org.http4k.lens.Path
+import org.http4k.lens.Query
+import org.http4k.lens.StringBiDiMappings
 import org.http4k.lens.localDate
+import org.http4k.lens.map
 import org.http4k.routing.ResourceLoader
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
@@ -32,6 +35,7 @@ import org.slf4j.LoggerFactory
 import java.io.StringWriter
 import java.time.Clock
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 val logger: Logger = LoggerFactory.getLogger("main")
@@ -73,11 +77,15 @@ class Assets(
     loader: ResourceLoader = ResourceLoader.Directory("src/main/resources/assets"),
 ) : RoutingHttpHandler by static(loader).withBasePath("/assets")
 
+val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
+
 class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
 ) : RoutingHttpHandler by "/" bind GET to {
-        val date = clock.instant().atZone(clock.zone).toLocalDate()
+        val date =
+            Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")(it)
+                ?: clock.instant().atZone(clock.zone).toLocalDate().toYearMonth()
         Response(OK).with(view of HomeViewModel(calendarBaseModel = date.toCalendarModel()))
     }
 
@@ -94,8 +102,10 @@ class Day(
         }
     }
 
-fun LocalDate.toCalendarModel(): CalendarBaseModel {
-    val dayLinks = (1..lengthOfMonth()).map { "/day/" + withDayOfMonth(it).format(DateTimeFormatter.ISO_LOCAL_DATE) }
+fun LocalDate.toCalendarModel(): CalendarBaseModel = toYearMonth().toCalendarModel()
+
+fun YearMonth.toCalendarModel(): CalendarBaseModel {
+    val dayLinks = (1..lengthOfMonth()).map { "/day/" + atDay(it).format(DateTimeFormatter.ISO_LOCAL_DATE) }
     return object : CalendarBaseModel {
         override val days: List<String> = dayLinks
         override val previousMonthDays: List<Int> = previousMonthDays()
@@ -103,17 +113,19 @@ fun LocalDate.toCalendarModel(): CalendarBaseModel {
     }
 }
 
-private fun LocalDate.previousMonthDays(): List<Int> {
-    val previousMonthDaysCount = withDayOfMonth(1).dayOfWeek.value - 1
+private fun YearMonth.previousMonthDays(): List<Int> {
+    val previousMonthDaysCount = atDay(1).dayOfWeek.value - 1
     val previousMonth = minusMonths(1)
     val previousMonthLength = previousMonth.lengthOfMonth()
     return ((previousMonthLength - previousMonthDaysCount + 1)..previousMonthLength).toList()
 }
 
-private fun LocalDate.nextMonthDays(): List<Int> {
-    val nextMonthDaysCount = 7 - withDayOfMonth(lengthOfMonth()).dayOfWeek.value
+private fun YearMonth.nextMonthDays(): List<Int> {
+    val nextMonthDaysCount = 7 - atDay(lengthOfMonth()).dayOfWeek.value
     return (1..nextMonthDaysCount).toList()
 }
+
+fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 @Suppress("unused")
 class HomeViewModel(calendarBaseModel: CalendarBaseModel) : ViewModel, CalendarBaseModel by calendarBaseModel {

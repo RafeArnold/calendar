@@ -14,8 +14,10 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 import kotlin.random.Random
 
@@ -117,13 +119,13 @@ class EndToEndTests {
         page.clickDay(1)
         page.assertThatDayTextIs(text = message2)
 
-        clock.del = LocalDate.of(2024, 2, Random.nextInt(1, 29)).toClock()
+        clock.del = LocalDate.of(2024, 2, Random.nextInt(1, 30)).toClock()
         page.navigateHome(server.port())
         page.assertNumOfDaysInCurrentMonthIs(29)
         page.clickDay(1)
         page.assertThatDayTextIs(text = message3)
 
-        clock.del = LocalDate.of(2023, 2, Random.nextInt(1, 28)).toClock()
+        clock.del = LocalDate.of(2023, 2, Random.nextInt(1, 29)).toClock()
         page.navigateHome(server.port())
         page.assertNumOfDaysInCurrentMonthIs(28)
         page.clickDay(1)
@@ -151,6 +153,47 @@ class EndToEndTests {
         page.assertDisplayedDaysOfPreviousMonthAre(emptyList())
         page.assertDisplayedDaysOfNextMonthAre((1..4).toList())
     }
+
+    @Test
+    fun `can navigate to a specific month`() {
+        val message1 = "this is the first message"
+        val message2 = "this is another message"
+        val message3 = "this one is different"
+        val message4 = "another one?"
+        val clock = MutableClock(LocalDate.EPOCH.toClock())
+        val messageLoader =
+            MapBackedMessageLoader(
+                mapOf(
+                    LocalDate.now(ZoneOffset.UTC) to message1,
+                    LocalDate.of(2024, 5, 1) to message2,
+                    LocalDate.of(2024, 2, 1) to message3,
+                    LocalDate.of(2023, 2, 1) to message4,
+                ),
+            )
+        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        val page = browser.newPage()
+
+        val date = LocalDate.now(ZoneOffset.UTC)
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.from(date))
+        page.assertNumOfDaysInCurrentMonthIs(date.lengthOfMonth())
+        page.clickDay(date.dayOfMonth)
+        page.assertThatDayTextIs(text = message1)
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 5))
+        page.assertNumOfDaysInCurrentMonthIs(31)
+        page.clickDay(1)
+        page.assertThatDayTextIs(text = message2)
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 2))
+        page.assertNumOfDaysInCurrentMonthIs(29)
+        page.clickDay(1)
+        page.assertThatDayTextIs(text = message3)
+
+        page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2023, 2))
+        page.assertNumOfDaysInCurrentMonthIs(28)
+        page.clickDay(1)
+        page.assertThatDayTextIs(text = message4)
+    }
 }
 
 private fun LocalDate.toClock(): Clock =
@@ -166,8 +209,18 @@ private class MutableClock(var del: Clock) : Clock() {
     override fun getZone(): ZoneId = del.zone
 }
 
-private fun Page.navigateHome(port: Int) {
-    navigate("http://localhost:$port")
+private fun Page.navigateHome(
+    port: Int,
+    monthQuery: YearMonth,
+) {
+    navigateHome(port = port, query = "?month=" + monthQuery.format(DateTimeFormatter.ofPattern("yyyy-MM")))
+}
+
+private fun Page.navigateHome(
+    port: Int,
+    query: String = "",
+) {
+    navigate("http://localhost:$port$query")
     assertThat(calendar()).isVisible()
 }
 
