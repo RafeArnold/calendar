@@ -85,7 +85,7 @@ class Day(
     view: BiDiBodyLens<ViewModel>,
     messageLoader: MessageLoader,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
-        val date = Path.localDate().of("date")(it)
+        val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         val message = messageLoader[date]
         if (message != null) {
             Response(OK).with(view of DayViewModel(text = message, calendarBaseModel = date.toCalendarModel()))
@@ -95,7 +95,7 @@ class Day(
     }
 
 fun LocalDate.toCalendarModel(): CalendarBaseModel {
-    val dayLinks = (1..lengthOfMonth()).map { "/day/" + withDayOfMonth(it).format(DateTimeFormatter.ISO_DATE) }
+    val dayLinks = (1..lengthOfMonth()).map { "/day/" + withDayOfMonth(it).format(DateTimeFormatter.ISO_LOCAL_DATE) }
     return object : CalendarBaseModel {
         override val days: List<String> = dayLinks
         override val previousMonthDays: List<Int> = previousMonthDays()
