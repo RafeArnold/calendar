@@ -98,7 +98,7 @@ class EndToEndTests {
         val message2 = "this is another message"
         val message3 = "this one is different"
         val message4 = "another one?"
-        val clock = MutableClock(Clock.systemUTC())
+        val clock = Clock.systemUTC().mutable()
         val messageLoader =
             MapBackedMessageLoader(
                 mapOf(
@@ -138,7 +138,7 @@ class EndToEndTests {
 
     @Test
     fun `trailing and following dates of the surrounding months are displayed`() {
-        val clock = MutableClock(Clock.systemUTC())
+        val clock = Clock.systemUTC().mutable()
         server = startServer(port = 0, clock = clock) { "whatever" }
         val page = browser.newPage()
 
@@ -164,7 +164,7 @@ class EndToEndTests {
         val message2 = "this is another message"
         val message3 = "this one is different"
         val message4 = "another one?"
-        val clock = MutableClock(LocalDate.EPOCH.toClock())
+        val clock = LocalDate.EPOCH.toClock()
         val messageLoader =
             MapBackedMessageLoader(
                 mapOf(
@@ -201,7 +201,7 @@ class EndToEndTests {
 
     @Test
     fun `back button navigates to month of current date`() {
-        val clock = MutableClock(LocalDate.EPOCH.toClock())
+        val clock = LocalDate.EPOCH.toClock()
         server = startServer(port = 0, clock = clock) { "whatever" }
         val page = browser.newPage()
 
@@ -271,12 +271,64 @@ class EndToEndTests {
         page.clickDay(1)
         page.assertThatDayTextIs(message3)
     }
+
+    @Test
+    fun `can navigate to current month`() {
+        val message1 = "this is the first message"
+        val message2 = "this is another message"
+        val message3 = "this one is different"
+        val messageLoader =
+            MapBackedMessageLoader(
+                mapOf(
+                    LocalDate.of(2024, 4, 1) to message1,
+                    LocalDate.of(2024, 5, 1) to message2,
+                    LocalDate.of(2024, 6, 1) to message3,
+                ),
+            )
+        val clock = LocalDate.of(2024, 5, 9).toMutableClock()
+        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 5))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message2)
+
+        clock.del = LocalDate.of(2024, 4, 13).toClock()
+        page.clickBack()
+        assertThat(page.todayButton()).hasText("13")
+        page.clickToday()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 4))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message1)
+
+        clock.del = LocalDate.of(2024, 4, 25).toClock()
+        page.clickBack()
+        assertThat(page.todayButton()).hasText("25")
+        // Clicking today while already on the current month should do nothing.
+        page.clickToday()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 4))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message1)
+
+        clock.del = LocalDate.of(2024, 6, 1).toClock()
+        page.clickBack()
+        assertThat(page.todayButton()).hasText("1")
+        page.clickToday()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 6))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message3)
+    }
 }
+
+private fun LocalDate.toMutableClock(): MutableClock = toClock().mutable()
 
 private fun YearMonth.toClock(): Clock = atDay(Random.nextInt(1, lengthOfMonth())).toClock()
 
 private fun LocalDate.toClock(): Clock =
     Clock.fixed(atTime(LocalTime.MIDNIGHT).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
+
+private fun Clock.mutable() = MutableClock(this)
 
 private class MutableClock(var del: Clock) : Clock() {
     override fun instant(): Instant = del.instant()
@@ -365,6 +417,11 @@ private fun Page.clickNextMonth() {
     nextMonthButton().click()
 }
 
+private fun Page.clickToday() {
+    assertThat(todayButton()).isVisible()
+    todayButton().click()
+}
+
 private fun Page.calendar(): Locator = getByTestId("calendar")
 
 private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
@@ -376,6 +433,8 @@ private fun Page.backButton(): Locator = getByTestId("back")
 private fun Page.previousMonthButton(): Locator = getByTestId("previous-month")
 
 private fun Page.nextMonthButton(): Locator = getByTestId("next-month")
+
+private fun Page.todayButton(): Locator = getByTestId("today")
 
 class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : MessageLoader {
     override fun get(date: LocalDate): String? = messages[date]

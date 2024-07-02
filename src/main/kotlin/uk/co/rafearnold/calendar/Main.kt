@@ -86,10 +86,13 @@ class Index(
         val date =
             Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")(it)
                 ?: clock.instant().atZone(clock.zone).toLocalDate().toYearMonth()
+        val today = clock.toDate()
         val viewModel =
             HomeViewModel(
                 previousMonthLink = monthLink(date.minusMonths(1)),
                 nextMonthLink = monthLink(date.plusMonths(1)),
+                todayLink = monthLink(today.toYearMonth()),
+                today = today.dayOfMonth,
                 calendarBaseModel = date.toCalendarModel(),
             )
         Response(OK).with(view of viewModel)
@@ -137,6 +140,8 @@ private fun YearMonth.nextMonthDays(): List<Int> {
     return (1..nextMonthDaysCount).toList()
 }
 
+private fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
+
 fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
@@ -145,6 +150,8 @@ private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(mon
 class HomeViewModel(
     val previousMonthLink: String,
     val nextMonthLink: String,
+    val todayLink: String,
+    val today: Int,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     private val rotated: Boolean = false

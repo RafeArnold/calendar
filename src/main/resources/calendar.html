@@ -1,5 +1,6 @@
 <div id="calendar-wrapper" class="max-w-2xl mx-auto px-10 pt-5">
-    <div class="h-8 flex items-center justify-end">
+    <div class="h-12 flex items-center justify-end">
+        {% if model.todayLink %}<button data-testid="today" hx-get="{{ model.todayLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="mx-4 size-8 text-gray-500 hover:text-black border-gray-300 hover:border-gray-500 border rounded-lg">{{ model.today }}</button>{% endif %}
         {% if model.previousMonthLink %}<button id="previous-month" data-testid="previous-month" hx-get="{{ model.previousMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="pr-2"><i class="fa-solid fa-chevron-up text-xl"></i></button>{% endif %}
         {% if model.nextMonthLink %}<button id="next-month" data-testid="next-month" hx-get="{{ model.nextMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="pr-2"><i class="fa-solid fa-chevron-down text-xl"></i></button>{% endif %}
     </div>
