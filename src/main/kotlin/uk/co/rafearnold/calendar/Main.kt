@@ -86,7 +86,13 @@ class Index(
         val date =
             Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")(it)
                 ?: clock.instant().atZone(clock.zone).toLocalDate().toYearMonth()
-        Response(OK).with(view of HomeViewModel(calendarBaseModel = date.toCalendarModel()))
+        val viewModel =
+            HomeViewModel(
+                previousMonthLink = monthLink(date.minusMonths(1)),
+                nextMonthLink = monthLink(date.plusMonths(1)),
+                calendarBaseModel = date.toCalendarModel(),
+            )
+        Response(OK).with(view of viewModel)
     }
 
 class Day(
@@ -99,7 +105,7 @@ class Day(
             val viewModel =
                 DayViewModel(
                     text = message,
-                    backLink = "/?month=" + monthFormatter.format(date),
+                    backLink = monthLink(date.toYearMonth()),
                     calendarBaseModel = date.toCalendarModel(),
                 )
             Response(OK).with(view of viewModel)
@@ -133,8 +139,14 @@ private fun YearMonth.nextMonthDays(): List<Int> {
 
 fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
+private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
+
 @Suppress("unused")
-class HomeViewModel(calendarBaseModel: CalendarBaseModel) : ViewModel, CalendarBaseModel by calendarBaseModel {
+class HomeViewModel(
+    val previousMonthLink: String,
+    val nextMonthLink: String,
+    calendarBaseModel: CalendarBaseModel,
+) : ViewModel, CalendarBaseModel by calendarBaseModel {
     private val rotated: Boolean = false
 
     override fun template(): String = "home"

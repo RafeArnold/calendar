@@ -5,6 +5,9 @@ import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
+import org.http4k.core.Uri
+import org.http4k.core.findSingle
+import org.http4k.core.queries
 import org.http4k.server.Http4kServer
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
@@ -20,6 +23,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 import kotlin.random.Random
+import kotlin.test.assertEquals
 
 class EndToEndTests {
     companion object {
@@ -222,7 +226,54 @@ class EndToEndTests {
         page.assertDisplayedDaysOfPreviousMonthAre(emptyList())
         page.assertDisplayedDaysOfNextMonthAre((1..4).toList())
     }
+
+    @Test
+    fun `can move between months`() {
+        val message1 = "this is the first message"
+        val message2 = "this is another message"
+        val message3 = "this one is different"
+        val messageLoader =
+            MapBackedMessageLoader(
+                mapOf(
+                    LocalDate.of(2024, 4, 1) to message1,
+                    LocalDate.of(2024, 5, 1) to message2,
+                    LocalDate.of(2024, 6, 1) to message3,
+                ),
+            )
+        server = startServer(port = 0, clock = YearMonth.of(2024, 6).toClock(), messageLoader = messageLoader)
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 6))
+
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 5))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message2)
+
+        page.clickBack()
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 4))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message1)
+
+        page.clickBack()
+        assertThat(page.nextMonthButton()).isVisible()
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 5))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message2)
+
+        page.clickBack()
+        assertThat(page.nextMonthButton()).isVisible()
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 6))
+        page.clickDay(1)
+        page.assertThatDayTextIs(message3)
+    }
 }
+
+private fun YearMonth.toClock(): Clock = atDay(Random.nextInt(1, lengthOfMonth())).toClock()
 
 private fun LocalDate.toClock(): Clock =
     Clock.fixed(atTime(LocalTime.MIDNIGHT).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
@@ -250,6 +301,23 @@ private fun Page.navigateHome(
 ) {
     navigate("http://localhost:$port$query")
     assertThat(calendar()).isVisible()
+}
+
+private fun Page.assertCurrentMonthIs(month: YearMonth) {
+    assertNumOfDaysInCurrentMonthIs(month.lengthOfMonth())
+    val previousMonth = month.minusMonths(1)
+    val previousMonthDays =
+        (previousMonth.lengthOfMonth() - (month.atDay(1).dayOfWeek.value - 1) + 1)..previousMonth.lengthOfMonth()
+    assertDisplayedDaysOfPreviousMonthAre(previousMonthDays.toList())
+    assertDisplayedDaysOfNextMonthAre((1..(7 - month.atDay(month.lengthOfMonth()).dayOfWeek.value)).toList())
+    assertMonthQueryIs(month)
+}
+
+private fun Page.assertMonthQueryIs(month: YearMonth) {
+    val queryValue = Uri.of(url()).queries().findSingle("month")
+    if (queryValue != null) {
+        assertEquals(month.format(DateTimeFormatter.ofPattern("yyyy-MM")), queryValue)
+    }
 }
 
 private fun Page.assertDisplayedDaysOfPreviousMonthAre(nums: List<Int>) {
@@ -287,6 +355,16 @@ private fun Page.clickBack() {
     assertThat(dayText()).not().isVisible()
 }
 
+private fun Page.clickPreviousMonth() {
+    assertThat(previousMonthButton()).isVisible()
+    previousMonthButton().click()
+}
+
+private fun Page.clickNextMonth() {
+    assertThat(nextMonthButton()).isVisible()
+    nextMonthButton().click()
+}
+
 private fun Page.calendar(): Locator = getByTestId("calendar")
 
 private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
@@ -294,6 +372,10 @@ private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
 private fun Page.dayText(): Locator = getByTestId("day-text")
 
 private fun Page.backButton(): Locator = getByTestId("back")
+
+private fun Page.previousMonthButton(): Locator = getByTestId("previous-month")
+
+private fun Page.nextMonthButton(): Locator = getByTestId("next-month")
 
 class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : MessageLoader {
     override fun get(date: LocalDate): String? = messages[date]

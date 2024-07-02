@@ -1,21 +1,27 @@
-<div id="calendar-wrapper" class="perspective-1000 relative">
-    <div id="calendar" data-testid="calendar" class="{% if model.rotated %}rotate-y-180 [.htmx-swapping_>_&]:rotate-y-0{% endif %} duration-1000 ease-in-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 rounded-lg bg-black shadow-2xl backface-hidden">
-        <div class="p-3 grid grid-cols-7 grid-rows-5">
-            {% for i in model.previousMonthDays %}
-            <div data-testid="prev-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
-            {% endfor %}
-            {% for day in model.days %}
-            <button data-testid="day-{{ loop.index + 1 }}" hx-get="{{ day }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="day-ready">{{ loop.index + 1 }}</button>
-            {% endfor %}
-            {% for i in model.nextMonthDays %}
-            <div data-testid="next-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
-            {% endfor %}
-        </div>
+<div id="calendar-wrapper" class="max-w-2xl mx-auto px-10 pt-5">
+    <div class="h-8 flex items-center justify-end">
+        {% if model.previousMonthLink %}<button id="previous-month" data-testid="previous-month" hx-get="{{ model.previousMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="pr-2"><i class="fa-solid fa-chevron-up text-xl"></i></button>{% endif %}
+        {% if model.nextMonthLink %}<button id="next-month" data-testid="next-month" hx-get="{{ model.nextMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="pr-2"><i class="fa-solid fa-chevron-down text-xl"></i></button>{% endif %}
     </div>
-    <div id="day" class="{% if not model.rotated %}-rotate-y-180{% else %}[.htmx-swapping_>_&]:-rotate-y-180{% endif %} duration-1000 ease-in-out absolute max-h-96 aspect-[7/5] m-auto top-10 inset-x-10 flex rounded-lg shadow-2xl backface-hidden">
-        <div class="relative flex grow items-center justify-center text-center">
-            <button data-testid="back" hx-get="{{ model.backLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML swap:1s" class="absolute text-xl left-5 top-3"><i class="fa-solid fa-arrow-left"></i></button>
-            <div data-testid="day-text">{{ model.text }}</div>
+    <div class="perspective-1000 relative">
+        <div id="calendar" data-testid="calendar" class="{% if model.rotated %}rotate-y-180 [.htmx-swapping_&]:rotate-y-0{% endif %} duration-1000 ease-in-out absolute w-full aspect-[7/5] rounded-lg bg-black shadow-2xl backface-hidden">
+            <div class="p-3 grid grid-cols-7 grid-rows-5">
+                {% for i in model.previousMonthDays %}
+                <div data-testid="prev-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
+                {% endfor %}
+                {% for day in model.days %}
+                <button data-testid="day-{{ loop.index + 1 }}" hx-get="{{ day }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="day-ready">{{ loop.index + 1 }}</button>
+                {% endfor %}
+                {% for i in model.nextMonthDays %}
+                <div data-testid="next-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div id="day" class="{% if not model.rotated %}-rotate-y-180{% else %}[.htmx-swapping_&]:-rotate-y-180{% endif %} duration-1000 ease-in-out absolute w-full aspect-[7/5] flex rounded-lg shadow-2xl backface-hidden">
+            <div class="relative flex grow items-center justify-center text-center">
+                <button data-testid="back" hx-get="{{ model.backLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML swap:1s" class="absolute text-xl left-5 top-3"><i class="fa-solid fa-arrow-left"></i></button>
+                <div data-testid="day-text">{{ model.text }}</div>
+            </div>
         </div>
     </div>
 </div>
