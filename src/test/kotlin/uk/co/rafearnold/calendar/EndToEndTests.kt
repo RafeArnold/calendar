@@ -298,7 +298,6 @@ class EndToEndTests {
 
         clock.del = LocalDate.of(2024, 4, 13).toClock()
         page.clickBack()
-        assertThat(page.todayButton()).hasText("13")
         page.clickToday()
         page.assertCurrentMonthIs(YearMonth.of(2024, 4))
         page.clickDay(1)
@@ -306,7 +305,6 @@ class EndToEndTests {
 
         clock.del = LocalDate.of(2024, 4, 25).toClock()
         page.clickBack()
-        assertThat(page.todayButton()).hasText("25")
         // Clicking today while already on the current month should do nothing.
         page.clickToday()
         page.assertCurrentMonthIs(YearMonth.of(2024, 4))
@@ -315,7 +313,6 @@ class EndToEndTests {
 
         clock.del = LocalDate.of(2024, 6, 1).toClock()
         page.clickBack()
-        assertThat(page.todayButton()).hasText("1")
         page.clickToday()
         page.assertCurrentMonthIs(YearMonth.of(2024, 6))
         page.clickDay(1)
