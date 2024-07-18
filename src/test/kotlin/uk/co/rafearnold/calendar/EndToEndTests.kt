@@ -21,6 +21,8 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 import java.util.regex.Pattern
 import kotlin.random.Random
 import kotlin.test.assertEquals
@@ -356,6 +358,8 @@ private fun Page.navigateHome(
 }
 
 private fun Page.assertCurrentMonthIs(month: YearMonth) {
+    assertThat(monthYear()).isVisible()
+    assertThat(monthYear()).hasText(month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK) + month.year)
     assertNumOfDaysInCurrentMonthIs(month.lengthOfMonth())
     val previousMonth = month.minusMonths(1)
     val previousMonthDays =
@@ -435,6 +439,8 @@ private fun Page.previousMonthButton(): Locator = getByTestId("previous-month")
 private fun Page.nextMonthButton(): Locator = getByTestId("next-month")
 
 private fun Page.todayButton(): Locator = getByTestId("today")
+
+private fun Page.monthYear(): Locator = getByTestId("month-year")
 
 class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : MessageLoader {
     override fun get(date: LocalDate): String? = messages[date]

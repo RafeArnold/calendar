@@ -37,6 +37,8 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
 val logger: Logger = LoggerFactory.getLogger("main")
 
@@ -93,6 +95,8 @@ class Index(
                 nextMonthLink = monthLink(date.plusMonths(1)),
                 todayLink = monthLink(today.toYearMonth()),
                 today = today.dayOfMonth,
+                month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
+                year = date.year,
                 calendarBaseModel = date.toCalendarModel(),
             )
         Response(OK).with(view of viewModel)
@@ -152,6 +156,8 @@ class HomeViewModel(
     val nextMonthLink: String,
     val todayLink: String,
     val today: Int,
+    val month: String,
+    val year: Int,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     private val rotated: Boolean = false
