@@ -12,7 +12,9 @@ import org.http4k.server.Http4kServer
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -46,6 +48,13 @@ class EndToEndTests {
 
     private val browser: Browser = playwright.chromium().launch()
     private lateinit var server: Http4kServer
+    private lateinit var dbUrl: String
+
+    @BeforeEach
+    fun startupEach() {
+        val dbFile = Files.createTempFile("calendar", ".db").also { it.toFile().deleteOnExit() }
+        dbUrl = "jdbc:sqlite:${dbFile.toAbsolutePath()}"
+    }
 
     @AfterEach
     fun tearEachDown() {
@@ -56,7 +65,7 @@ class EndToEndTests {
     @Test
     fun `navigate from calendar to a day and back to calendar`() {
         val dayText = "something sweet"
-        server = startServer(port = 0) { dayText }
+        server = startServer(port = 0, dbUrl = dbUrl) { dayText }
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)
@@ -78,7 +87,7 @@ class EndToEndTests {
                     LocalDate.of(2024, 5, 27) to message3,
                 ),
             )
-        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)
@@ -110,7 +119,7 @@ class EndToEndTests {
                     LocalDate.of(2023, 2, 1) to message4,
                 ),
             )
-        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
 
         clock.del = LocalDate.of(2024, 5, Random.nextInt(1, 32)).toClock()
@@ -141,7 +150,7 @@ class EndToEndTests {
     @Test
     fun `trailing and following dates of the surrounding months are displayed`() {
         val clock = Clock.systemUTC().mutable()
-        server = startServer(port = 0, clock = clock) { "whatever" }
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
         val page = browser.newPage()
 
         clock.del = LocalDate.of(2024, 5, Random.nextInt(1, 32)).toClock()
@@ -176,7 +185,7 @@ class EndToEndTests {
                     LocalDate.of(2023, 2, 1) to message4,
                 ),
             )
-        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
 
         val date = LocalDate.now(ZoneOffset.UTC)
@@ -204,7 +213,7 @@ class EndToEndTests {
     @Test
     fun `back button navigates to month of current date`() {
         val clock = LocalDate.EPOCH.toClock()
-        server = startServer(port = 0, clock = clock) { "whatever" }
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 5))
@@ -242,7 +251,8 @@ class EndToEndTests {
                     LocalDate.of(2024, 6, 1) to message3,
                 ),
             )
-        server = startServer(port = 0, clock = YearMonth.of(2024, 6).toClock(), messageLoader = messageLoader)
+        server =
+            startServer(port = 0, clock = YearMonth.of(2024, 6).toClock(), dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -288,7 +298,7 @@ class EndToEndTests {
                 ),
             )
         val clock = LocalDate.of(2024, 5, 9).toMutableClock()
-        server = startServer(port = 0, clock = clock, messageLoader = messageLoader)
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -317,6 +327,40 @@ class EndToEndTests {
         page.assertCurrentMonthIs(YearMonth.of(2024, 6))
         page.clickDay(1)
         page.assertThatDayTextIs(message3)
+    }
+
+    @Test
+    fun `days that have already been opened are differentiated from unopened days`() {
+        val clock = LocalDate.of(2024, 7, 31).toClock()
+        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre(1..31)
+
+        page.clickDay(1)
+        page.clickBack()
+        page.assertUnopenedDaysAre(2..31)
+        page.assertOpenedDaysAre(listOf(1))
+
+        page.clickDay(5)
+        page.clickBack()
+        page.assertUnopenedDaysAre((2..4) + (6..31))
+        page.assertOpenedDaysAre(listOf(1, 5))
+
+        // Clicking an already opened day changes nothing.
+        page.clickDay(1)
+        page.clickBack()
+        page.assertUnopenedDaysAre((2..4) + (6..31))
+        page.assertOpenedDaysAre(listOf(1, 5))
+
+        // Restarting the server changes nothing.
+        server.stop()
+        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
+        page.reload()
+        page.assertUnopenedDaysAre((2..4) + (6..31))
+        page.assertOpenedDaysAre(listOf(1, 5))
     }
 }
 
@@ -352,6 +396,22 @@ private fun Page.navigateHome(
 ) {
     navigate("http://localhost:$port$query")
     assertThat(calendar()).isVisible()
+}
+
+private fun Page.assertUnopenedDaysAre(days: Iterable<Int>) {
+    for (dayNum in days) {
+        val day = day(dayNum = dayNum)
+        assertThat(day).hasClass("day-ready")
+        assertThat(day).not().hasClass("day-opened")
+    }
+}
+
+private fun Page.assertOpenedDaysAre(days: Iterable<Int>) {
+    for (dayNum in days) {
+        val day = day(dayNum = dayNum)
+        assertThat(day).hasClass("day-opened")
+        assertThat(day).not().hasClass("day-ready")
+    }
 }
 
 private fun Page.assertCurrentMonthIs(month: YearMonth) {

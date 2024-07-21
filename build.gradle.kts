@@ -1,9 +1,20 @@
 import com.github.gradle.node.npm.task.NpxTask
+import org.jmailen.gradle.kotlinter.tasks.LintTask
+import java.nio.file.Files
+import java.nio.file.Path
+
+buildscript {
+    dependencies {
+        classpath("org.xerial:sqlite-jdbc:3.46.0.0")
+    }
+}
 
 plugins {
     kotlin("jvm") version "1.9.23"
     id("org.jmailen.kotlinter") version "4.2.0"
     id("com.github.node-gradle.node") version "7.0.2"
+    id("org.flywaydb.flyway") version "10.0.0"
+    id("org.jooq.jooq-codegen-gradle") version "3.19.10"
     application
 }
 
@@ -23,10 +34,52 @@ dependencies {
 
     implementation("io.pebbletemplates:pebble:3.2.2")
 
+    implementation("org.jooq:jooq:3.19.10")
+    implementation("org.flywaydb:flyway-core:10.16.0")
+    implementation("org.xerial:sqlite-jdbc:3.46.0.0")
+
     implementation("ch.qos.logback:logback-classic:1.4.12")
 
     testImplementation(kotlin("test"))
     testImplementation("com.microsoft.playwright:playwright:1.41.2")
+}
+
+val dbFile: Path = Files.createTempFile("calendar", ".db")
+    .also { it.toFile().deleteOnExit() }
+val dbUrl: String = "jdbc:sqlite:${dbFile.toAbsolutePath()}"
+
+flyway {
+    url = dbUrl
+}
+
+jooq {
+    configuration {
+        jdbc {
+            url = dbUrl
+        }
+        generator {
+            name = "org.jooq.codegen.KotlinGenerator"
+            database {
+                excludes = "flyway_schema_history"
+            }
+            target {
+                packageName = "uk.co.rafearnold.calendar.jooq"
+            }
+        }
+    }
+}
+
+tasks.jooqCodegen {
+    dependsOn("flywayMigrate")
+}
+
+tasks.compileKotlin {
+    dependsOn("jooqCodegen")
+}
+
+tasks.withType<LintTask> {
+    dependsOn("jooqCodegen")
+    exclude("/uk/co/rafearnold/calendar/jooq")
 }
 
 tasks.test {

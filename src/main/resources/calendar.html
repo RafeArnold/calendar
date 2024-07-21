@@ -12,7 +12,7 @@
                 <div data-testid="prev-month-day-{{ i }}" class="day-other-month">{{ i }}</div>
                 {% endfor %}
                 {% for day in model.days %}
-                <button data-testid="day-{{ loop.index + 1 }}" hx-get="{{ day }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="day-ready">{{ loop.index + 1 }}</button>
+                <button data-testid="day-{{ loop.index + 1 }}" hx-get="{{ day.link }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="{% if day.opened %}day-opened{% else %}day-ready{% endif %}">{{ loop.index + 1 }}</button>
                 {% endfor %}
                 {% for i in model.nextMonthDays %}
                 <div data-testid="next-month-day-{{ i }}" class="day-other-month">{{ i }}</div>

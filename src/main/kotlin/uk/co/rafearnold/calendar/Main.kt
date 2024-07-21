@@ -6,5 +6,5 @@ import org.slf4j.LoggerFactory
 val logger: Logger = LoggerFactory.getLogger("main")
 
 fun main() {
-    startServer { "something sweet" }.block()
+    startServer(dbUrl = "jdbc:sqlite:calendar.db") { "something sweet" }.block()
 }
