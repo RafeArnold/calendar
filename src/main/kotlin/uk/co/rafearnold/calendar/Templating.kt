@@ -6,13 +6,17 @@ import io.pebbletemplates.pebble.loader.FileLoader
 import org.http4k.template.TemplateRenderer
 import org.http4k.template.ViewModel
 import java.io.StringWriter
+import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
-fun YearMonth.toCalendarModel(daysRepo: DaysRepository): CalendarBaseModel {
+fun YearMonth.toCalendarModel(
+    daysRepo: DaysRepository,
+    clock: Clock,
+): CalendarBaseModel {
     val openedDays = daysRepo.getOpenedDaysOfMonth(this)
-    val days = (1..lengthOfMonth()).map { atDay(it).toDayModel(openedDays.contains(it)) }
+    val days = (1..lengthOfMonth()).map { atDay(it).toDayModel(opened = openedDays.contains(it), now = clock.toDate()) }
     return object : CalendarBaseModel {
         override val days: List<DayModel> = days
         override val previousMonthDays: List<Int> = previousMonthDays()
@@ -63,10 +67,13 @@ interface CalendarBaseModel {
     val nextMonthDays: List<Int>
 }
 
-private fun LocalDate.toDayModel(opened: Boolean): DayModel =
-    DayModel(link = "/day/" + format(DateTimeFormatter.ISO_LOCAL_DATE), opened = opened)
+private fun LocalDate.toDayModel(
+    opened: Boolean,
+    now: LocalDate,
+): DayModel =
+    DayModel(link = "/day/" + format(DateTimeFormatter.ISO_LOCAL_DATE), opened = opened, disabled = this.isAfter(now))
 
-data class DayModel(val link: String, val opened: Boolean)
+data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean)
 
 class PebbleTemplateRenderer(
     private val engine: PebbleEngine =

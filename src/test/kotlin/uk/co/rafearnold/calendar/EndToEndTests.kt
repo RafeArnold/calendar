@@ -175,7 +175,6 @@ class EndToEndTests {
         val message2 = "this is another message"
         val message3 = "this one is different"
         val message4 = "another one?"
-        val clock = LocalDate.EPOCH.toClock()
         val messageLoader =
             MapBackedMessageLoader(
                 mapOf(
@@ -185,7 +184,7 @@ class EndToEndTests {
                     LocalDate.of(2023, 2, 1) to message4,
                 ),
             )
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(port = 0, clock = Clock.systemUTC(), dbUrl = dbUrl, messageLoader = messageLoader)
         val page = browser.newPage()
 
         val date = LocalDate.now(ZoneOffset.UTC)
@@ -212,7 +211,7 @@ class EndToEndTests {
 
     @Test
     fun `back button navigates to month of current date`() {
-        val clock = LocalDate.EPOCH.toClock()
+        val clock = YearMonth.of(2024, 6).toClock()
         server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
         val page = browser.newPage()
 
@@ -362,6 +361,22 @@ class EndToEndTests {
         page.assertUnopenedDaysAre((2..4) + (6..31))
         page.assertOpenedDaysAre(listOf(1, 5))
     }
+
+    @Test
+    fun `cannot open days in the future`() {
+        val clock = LocalDate.of(2024, 7, 21).toClock()
+        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+
+        page.assertDaysAreEnabled(1..21)
+        page.assertDaysAreDisabled(22..31)
+
+        page.clickDay(21)
+        page.assertThatDayTextIs("whatever")
+        page.clickBack()
+    }
 }
 
 private fun LocalDate.toMutableClock(): MutableClock = toClock().mutable()
@@ -396,6 +411,14 @@ private fun Page.navigateHome(
 ) {
     navigate("http://localhost:$port$query")
     assertThat(calendar()).isVisible()
+}
+
+private fun Page.assertDaysAreEnabled(days: Iterable<Int>) {
+    for (dayNum in days) assertThat(day(dayNum = dayNum)).not().isDisabled()
+}
+
+private fun Page.assertDaysAreDisabled(days: Iterable<Int>) {
+    for (dayNum in days) assertThat(day(dayNum = dayNum)).isDisabled()
 }
 
 private fun Page.assertUnopenedDaysAre(days: Iterable<Int>) {

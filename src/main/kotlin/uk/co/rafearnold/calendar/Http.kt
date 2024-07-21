@@ -49,7 +49,8 @@ fun startServer(
     val daysRepository = DaysRepository(DSL.using(dataSource, SQLDialect.SQLITE), clock)
     val templateRenderer = PebbleTemplateRenderer()
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
-    val router = routes(Assets(), Index(view, clock, daysRepository), DayRoute(view, messageLoader, daysRepository))
+    val router =
+        routes(Assets(), Index(view, clock, daysRepository), DayRoute(view, messageLoader, clock, daysRepository))
     val app =
         Filter { next ->
             {
@@ -96,7 +97,7 @@ class Index(
                 todayLink = monthLink(clock.toDate().toYearMonth()),
                 month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = date.year,
-                calendarBaseModel = date.toCalendarModel(daysRepo),
+                calendarBaseModel = date.toCalendarModel(daysRepo, clock),
             )
         Response(OK).with(view of viewModel)
     }
@@ -104,6 +105,7 @@ class Index(
 class DayRoute(
     view: BiDiBodyLens<ViewModel>,
     messageLoader: MessageLoader,
+    clock: Clock,
     daysRepo: DaysRepository,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
@@ -115,7 +117,7 @@ class DayRoute(
                 DayViewModel(
                     text = message,
                     backLink = monthLink(month),
-                    calendarBaseModel = date.toCalendarModel(daysRepo),
+                    calendarBaseModel = date.toCalendarModel(daysRepo, clock),
                 )
             Response(OK).with(view of viewModel)
         } else {
@@ -123,9 +125,12 @@ class DayRoute(
         }
     }
 
-fun LocalDate.toCalendarModel(daysRepo: DaysRepository): CalendarBaseModel = toYearMonth().toCalendarModel(daysRepo)
+fun LocalDate.toCalendarModel(
+    daysRepo: DaysRepository,
+    clock: Clock,
+): CalendarBaseModel = toYearMonth().toCalendarModel(daysRepo, clock)
 
-private fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
+fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
 
 fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
 
