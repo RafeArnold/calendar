@@ -26,7 +26,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.12")
 
     testImplementation(kotlin("test"))
-    testImplementation("com.microsoft.playwright:playwright:1.41.2")
+    testImplementation("com.microsoft.playwright:playwright:1.45.0")
 }
 
 tasks.test {
