@@ -38,7 +38,7 @@ dependencies {
     implementation("org.flywaydb:flyway-core:10.16.0")
     implementation("org.xerial:sqlite-jdbc:3.46.0.0")
 
-    implementation("ch.qos.logback:logback-classic:1.4.12")
+    implementation("ch.qos.logback:logback-classic:1.5.6")
 
     testImplementation(kotlin("test"))
     testImplementation("com.microsoft.playwright:playwright:1.41.2")
