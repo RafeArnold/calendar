@@ -331,7 +331,7 @@ class EndToEndTests {
     @Test
     fun `days that have already been opened are differentiated from unopened days`() {
         val clock = LocalDate.of(2024, 7, 31).toClock()
-        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -356,8 +356,8 @@ class EndToEndTests {
 
         // Restarting the server changes nothing.
         server.stop()
-        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
-        page.reload()
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        page.navigateHome(port = server.port())
         page.assertUnopenedDaysAre((2..4) + (6..31))
         page.assertOpenedDaysAre(listOf(1, 5))
     }
@@ -365,7 +365,7 @@ class EndToEndTests {
     @Test
     fun `cannot open days in the future`() {
         val clock = LocalDate.of(2024, 7, 21).toClock()
-        server = startServer(clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
