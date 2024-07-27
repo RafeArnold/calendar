@@ -7,6 +7,7 @@ import org.http4k.core.Filter
 import org.http4k.core.Method.GET
 import org.http4k.core.Response
 import org.http4k.core.Status
+import org.http4k.core.Status.Companion.FORBIDDEN
 import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.then
@@ -109,19 +110,23 @@ class DayRoute(
     daysRepo: DaysRepository,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
-        daysRepo.markDayAsOpened(date)
-        val message = messageLoader[date]
-        if (message != null) {
-            val month = date.toYearMonth()
-            val viewModel =
-                DayViewModel(
-                    text = message,
-                    backLink = monthLink(month),
-                    calendarBaseModel = date.toCalendarModel(daysRepo, clock),
-                )
-            Response(OK).with(view of viewModel)
+        if (date.isAfter(clock.now().toLocalDate())) {
+            Response(FORBIDDEN)
         } else {
-            Response(NOT_FOUND)
+            daysRepo.markDayAsOpened(date)
+            val message = messageLoader[date]
+            if (message != null) {
+                val month = date.toYearMonth()
+                val viewModel =
+                    DayViewModel(
+                        text = message,
+                        backLink = monthLink(month),
+                        calendarBaseModel = date.toCalendarModel(daysRepo, clock),
+                    )
+                Response(OK).with(view of viewModel)
+            } else {
+                Response(NOT_FOUND)
+            }
         }
     }
 

@@ -16,11 +16,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.time.Clock
-import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.YearMonth
-import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -379,25 +376,6 @@ class EndToEndTests {
     }
 }
 
-private fun LocalDate.toMutableClock(): MutableClock = toClock().mutable()
-
-private fun YearMonth.toClock(): Clock = atDay(Random.nextInt(1, lengthOfMonth())).toClock()
-
-private fun LocalDate.toClock(): Clock =
-    Clock.fixed(atTime(LocalTime.MIDNIGHT).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
-
-private fun Clock.mutable() = MutableClock(this)
-
-private class MutableClock(var del: Clock) : Clock() {
-    override fun instant(): Instant = del.instant()
-
-    override fun millis(): Long = del.millis()
-
-    override fun withZone(zone: ZoneId): Clock = del.withZone(zone)
-
-    override fun getZone(): ZoneId = del.zone
-}
-
 private fun Page.navigateHome(
     port: Int,
     monthQuery: YearMonth,
@@ -521,7 +499,3 @@ private fun Page.nextMonthButton(): Locator = getByTestId("next-month")
 private fun Page.todayButton(): Locator = getByTestId("today")
 
 private fun Page.monthYear(): Locator = getByTestId("month-year")
-
-class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : MessageLoader {
-    override fun get(date: LocalDate): String? = messages[date]
-}
