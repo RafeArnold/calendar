@@ -32,8 +32,10 @@ class HttpTests {
 
     @Test
     fun `only allows retrieval of days in the past`() {
-        val today = LocalDate.of(2024, 7, 15)
-        server = startServer(port = 0, clock = today.toClock(), dbUrl = dbUrl) { "whatever" }
+        var today = LocalDate.of(2024, 7, 15)
+        val clock = today.toMutableClock()
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+
         assertEquals(200, getDay(today).statusCode())
         assertEquals(200, getDay(today.minusDays(1)).statusCode())
         assertEquals(200, getDay(today.minusMonths(1).plusDays(1)).statusCode())
@@ -47,6 +49,15 @@ class HttpTests {
             assertEquals("", it.body())
         }
         getDay(today.plusYears(1).minusDays(1)).also {
+            assertEquals(403, it.statusCode())
+            assertEquals("", it.body())
+        }
+
+        today = today.plusMonths(3).minusDays(6)
+        clock.del = today.toClock()
+
+        assertEquals(200, getDay(today).statusCode())
+        getDay(today.plusDays(1)).also {
             assertEquals(403, it.statusCode())
             assertEquals("", it.body())
         }
