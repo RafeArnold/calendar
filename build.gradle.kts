@@ -10,7 +10,7 @@ buildscript {
 }
 
 plugins {
-    kotlin("jvm") version "1.9.23"
+    kotlin("jvm") version "2.0.0"
     id("org.jmailen.kotlinter") version "4.4.1"
     id("com.github.node-gradle.node") version "7.0.2"
     id("org.flywaydb.flyway") version "10.0.0"
