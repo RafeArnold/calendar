@@ -41,7 +41,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
     testImplementation(kotlin("test"))
-    testImplementation("com.microsoft.playwright:playwright:1.45.0")
+    testImplementation("com.microsoft.playwright:playwright:1.45.1")
 }
 
 val dbFile: Path = Files.createTempFile("calendar", ".db")
