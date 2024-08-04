@@ -5,6 +5,7 @@
 @layer components {
     .day-base {
         @apply aspect-square m-[12%] flex items-center justify-center bg-white text-sm select-none;
+        view-transition-class: day;
     }
     .day-opened {
         @apply day-base bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
@@ -17,5 +18,9 @@
     }
     .day-other-month {
         @apply day-base bg-gray-700 text-gray-400;
+    }
+
+    ::view-transition-old(.day),
+    ::view-transition-new(.day) {
     }
 }
