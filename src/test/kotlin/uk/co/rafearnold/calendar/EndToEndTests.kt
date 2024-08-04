@@ -14,7 +14,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
@@ -23,7 +25,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import java.util.regex.Pattern
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.Path
+import kotlin.io.path.copyToRecursively
+import kotlin.io.path.readBytes
 import kotlin.random.Random
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 class EndToEndTests {
@@ -373,6 +380,47 @@ class EndToEndTests {
         page.clickDay(21)
         page.assertThatDayTextIs("whatever")
         page.clickBack()
+    }
+
+    @Test
+    @OptIn(ExperimentalPathApi::class)
+    fun `the image of the currently viewed month is displayed`(
+        @TempDir assetsDir: Path,
+    ) {
+        val clock = LocalDate.of(2024, 7, 21).toClock()
+        Path("src/main/resources/assets").copyToRecursively(assetsDir, followLinks = false, overwrite = true)
+        val monthImagesDir = assetsDir.resolve("month-images").apply { Files.createDirectories(this) }
+        copyImage("cat-1.jpg", monthImagesDir.resolve("2024-07.jpg"))
+        copyImage("cat-2.jpg", monthImagesDir.resolve("2024-06.jpg"))
+        copyImage("cat-3.jpg", monthImagesDir.resolve("2024-08.jpg"))
+        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, assetsDir = assetsDir.toString()) { "whatever" }
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+
+        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 7))
+
+        page.clickNextMonth()
+
+        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 8))
+
+        page.clickPreviousMonth()
+        page.clickPreviousMonth()
+
+        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 6))
+    }
+
+    private fun Page.assertMonthImageIs(
+        assetsDir: Path,
+        month: YearMonth,
+    ) {
+        val monthImage = getByTestId("month-image")
+        val formattedMonth = month.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        assertThat(monthImage).hasAttribute("src", "/assets/month-images/$formattedMonth.jpg")
+        request().get(server.uri(monthImage.getAttribute("src")).toASCIIString()).let { response ->
+            assertThat(response).isOK()
+            assertContentEquals(assetsDir.resolve("month-images/$formattedMonth.jpg").readBytes(), response.body())
+        }
     }
 }
 

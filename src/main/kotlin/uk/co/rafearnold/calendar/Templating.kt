@@ -43,6 +43,7 @@ class HomeViewModel(
     val todayLink: String,
     val month: String,
     val year: Int,
+    val monthImageLink: String,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     private val rotated: Boolean = false

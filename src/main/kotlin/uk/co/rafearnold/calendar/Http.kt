@@ -43,6 +43,7 @@ fun startServer(
     port: Int = 8080,
     clock: Clock = Clock.systemUTC(),
     dbUrl: String,
+    assetsDir: String = "src/main/resources/assets",
     messageLoader: MessageLoader,
 ): Http4kServer {
     val dataSource = SQLiteDataSource().apply { url = dbUrl }
@@ -51,7 +52,11 @@ fun startServer(
     val templateRenderer = PebbleTemplateRenderer()
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
     val router =
-        routes(Assets(), Index(view, clock, daysRepository), DayRoute(view, messageLoader, clock, daysRepository))
+        routes(
+            Assets(assetsDir = assetsDir),
+            Index(view, clock, daysRepository),
+            DayRoute(view, messageLoader, clock, daysRepository),
+        )
     val app =
         Filter { next ->
             {
@@ -78,8 +83,8 @@ fun interface MessageLoader {
 }
 
 class Assets(
-    loader: ResourceLoader = ResourceLoader.Directory("src/main/resources/assets"),
-) : RoutingHttpHandler by static(loader).withBasePath("/assets")
+    assetsDir: String,
+) : RoutingHttpHandler by static(ResourceLoader.Directory(assetsDir)).withBasePath("/assets")
 
 val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
 
@@ -98,6 +103,7 @@ class Index(
                 todayLink = monthLink(clock.toDate().toYearMonth()),
                 month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = date.year,
+                monthImageLink = monthImageLink(date),
                 calendarBaseModel = date.toCalendarModel(daysRepo, clock),
             )
         Response(OK).with(view of viewModel)
@@ -142,3 +148,5 @@ fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
 fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
+
+private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
