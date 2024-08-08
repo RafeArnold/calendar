@@ -69,7 +69,7 @@ class EndToEndTests {
     @Test
     fun `navigate from calendar to a day and back to calendar`() {
         val dayText = "something sweet"
-        server = startServer(port = 0, dbUrl = dbUrl) { dayText }
+        server = startServer { dayText }
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)
@@ -91,7 +91,7 @@ class EndToEndTests {
                     LocalDate.of(2024, 5, 27) to message3,
                 ),
             )
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(clock = clock, messageLoader = messageLoader)
         val page = browser.newPage()
         page.navigateHome(server.port())
         page.clickDay(1)
@@ -123,7 +123,7 @@ class EndToEndTests {
                     LocalDate.of(2023, 2, 1) to message4,
                 ),
             )
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(clock = clock, messageLoader = messageLoader)
         val page = browser.newPage()
 
         clock.del = LocalDate.of(2024, 5, Random.nextInt(1, 32)).toClock()
@@ -154,7 +154,7 @@ class EndToEndTests {
     @Test
     fun `trailing and following dates of the surrounding months are displayed`() {
         val clock = Clock.systemUTC().mutable()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock) { "whatever" }
         val page = browser.newPage()
 
         clock.del = LocalDate.of(2024, 5, Random.nextInt(1, 32)).toClock()
@@ -188,7 +188,7 @@ class EndToEndTests {
                     LocalDate.of(2023, 2, 1) to message4,
                 ),
             )
-        server = startServer(port = 0, clock = Clock.systemUTC(), dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(clock = Clock.systemUTC(), messageLoader = messageLoader)
         val page = browser.newPage()
 
         val date = LocalDate.now(ZoneOffset.UTC)
@@ -216,7 +216,7 @@ class EndToEndTests {
     @Test
     fun `back button navigates to month of current date`() {
         val clock = YearMonth.of(2024, 6).toClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port(), monthQuery = YearMonth.of(2024, 5))
@@ -254,8 +254,7 @@ class EndToEndTests {
                     LocalDate.of(2024, 6, 1) to message3,
                 ),
             )
-        server =
-            startServer(port = 0, clock = YearMonth.of(2024, 6).toClock(), dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(clock = YearMonth.of(2024, 6).toClock(), messageLoader = messageLoader)
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -301,7 +300,7 @@ class EndToEndTests {
                 ),
             )
         val clock = LocalDate.of(2024, 5, 9).toMutableClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, messageLoader = messageLoader)
+        server = startServer(clock = clock, messageLoader = messageLoader)
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -335,7 +334,7 @@ class EndToEndTests {
     @Test
     fun `days that have already been opened are differentiated from unopened days`() {
         val clock = LocalDate.of(2024, 7, 31).toClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -360,7 +359,7 @@ class EndToEndTests {
 
         // Restarting the server changes nothing.
         server.stop()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock) { "whatever" }
         page.navigateHome(port = server.port())
         page.assertUnopenedDaysAre((2..4) + (6..31))
         page.assertOpenedDaysAre(listOf(1, 5))
@@ -369,7 +368,7 @@ class EndToEndTests {
     @Test
     fun `cannot open days in the future`() {
         val clock = LocalDate.of(2024, 7, 21).toClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -393,7 +392,7 @@ class EndToEndTests {
         copyImage("cat-1.jpg", monthImagesDir.resolve("2024-07.jpg"))
         copyImage("cat-2.jpg", monthImagesDir.resolve("2024-06.jpg"))
         copyImage("cat-3.jpg", monthImagesDir.resolve("2024-08.jpg"))
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl, assetsDir = assetsDir.toString()) { "whatever" }
+        server = startServer(clock = clock, assetsDir = assetsDir.toString()) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -422,6 +421,19 @@ class EndToEndTests {
             assertContentEquals(assetsDir.resolve("month-images/$formattedMonth.jpg").readBytes(), response.body())
         }
     }
+
+    private fun startServer(
+        clock: Clock = Clock.systemUTC(),
+        assetsDir: String = "src/main/resources/assets",
+        messageLoader: MessageLoader,
+    ): Http4kServer =
+        Config(
+            port = 0,
+            clock = clock,
+            dbUrl = dbUrl,
+            assetsDir = assetsDir,
+            messageLoader = messageLoader,
+        ).startServer()
 }
 
 private fun Page.navigateHome(

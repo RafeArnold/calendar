@@ -39,13 +39,15 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-fun startServer(
-    port: Int = 8080,
-    clock: Clock = Clock.systemUTC(),
-    dbUrl: String,
-    assetsDir: String = "src/main/resources/assets",
-    messageLoader: MessageLoader,
-): Http4kServer {
+data class Config(
+    val port: Int,
+    val clock: Clock,
+    val dbUrl: String,
+    val assetsDir: String,
+    val messageLoader: MessageLoader,
+)
+
+fun Config.startServer(): Http4kServer {
     val dataSource = SQLiteDataSource().apply { url = dbUrl }
     migrateDb(dataSource)
     val daysRepository = DaysRepository(DSL.using(dataSource, SQLDialect.SQLITE), clock)

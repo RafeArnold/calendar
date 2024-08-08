@@ -9,6 +9,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
+import java.time.Clock
 import java.time.LocalDate
 import kotlin.test.assertEquals
 
@@ -32,7 +33,7 @@ class HttpTests {
     fun `only allows retrieval of days in the past`() {
         var today = LocalDate.of(2024, 7, 15)
         val clock = today.toMutableClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock)
 
         assertEquals(200, getDay(today).statusCode())
         assertEquals(200, getDay(today.minusDays(1)).statusCode())
@@ -63,4 +64,12 @@ class HttpTests {
 
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
+
+    private fun startServer(clock: Clock): Http4kServer =
+        Config(
+            port = 0,
+            clock = clock,
+            dbUrl = dbUrl,
+            assetsDir = "src/main/resources/assets",
+        ) { "whatever" }.startServer()
 }
