@@ -5,6 +5,7 @@ import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
+import com.microsoft.playwright.options.RequestOptions
 import org.http4k.core.Uri
 import org.http4k.core.findSingle
 import org.http4k.core.queries
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -24,6 +26,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import java.util.UUID
 import java.util.regex.Pattern
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.Path
@@ -32,6 +35,8 @@ import kotlin.io.path.readBytes
 import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class EndToEndTests {
     companion object {
@@ -409,6 +414,66 @@ class EndToEndTests {
         page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 6))
     }
 
+    @Test
+    fun `calendar is accessible after authenticating`() {
+        GoogleOAuthServer().use { authServer ->
+            val today = LocalDate.of(2024, 8, 10)
+            val clientId = UUID.randomUUID().toString()
+            val clientSecret = UUID.randomUUID().toString()
+            val auth =
+                googleOauth(
+                    tokenServerUrl = URI(authServer.baseUrl() + "/token"),
+                    clientId = clientId,
+                    clientSecret = clientSecret,
+                )
+            server = startServer(clock = today.toClock(), auth = auth) { "something sweet" }
+            authServer.stubTokenExchange(
+                clientId = clientId,
+                email = "test@example.com",
+                subject = UUID.randomUUID().toString(),
+            )
+
+            val page = browser.newPage()
+
+            // Before authenticating
+            val response =
+                page.request().get(server.uri("/").toASCIIString(), RequestOptions.create().setMaxRedirects(0))
+            assertThat(response).not().isOK()
+            assertEquals(302, response.status())
+            val locationUrl = response.headers()["location"]?.let { URI(it) }
+            assertNotNull(locationUrl)
+            assertTrue(locationUrl.toASCIIString().startsWith("https://accounts.google.com/o/oauth2/auth"))
+
+            // Authenticate
+            val authCode = UUID.randomUUID().toString()
+            page.navigate(server.uri("/oauth/code?code=$authCode").toASCIIString())
+
+            // Client was redirected to the home page after authenticating.
+            assertThat(page).hasURL(server.uri("/").toASCIIString())
+
+            authServer.verifyTokenExchanged(
+                authCode = authCode,
+                clientId = clientId,
+                clientSecret = clientSecret,
+                redirectUri = server.uri("/oauth/code").toASCIIString(),
+            )
+            // The only request sent to the auth server was the token exchange request.
+            assertEquals(1, authServer.serveEvents.requests.size)
+            authServer.resetRequests()
+
+            // Verify that the app works as expected.
+            page.assertCurrentMonthIs(today.toYearMonth())
+            page.clickDay(1)
+            page.assertThatDayTextIs("something sweet")
+            page.clickBack()
+            page.clickNextMonth()
+            page.assertCurrentMonthIs(today.toYearMonth().plusMonths(1))
+
+            // No more requests made to the auth server after the token is exchanged.
+            assertEquals(0, authServer.serveEvents.requests.size)
+        }
+    }
+
     private fun Page.assertMonthImageIs(
         assetsDir: Path,
         month: YearMonth,
@@ -425,6 +490,7 @@ class EndToEndTests {
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
         assetsDir: String = "src/main/resources/assets",
+        auth: AuthConfig = NoAuth,
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -432,8 +498,20 @@ class EndToEndTests {
             clock = clock,
             dbUrl = dbUrl,
             assetsDir = assetsDir,
+            auth = auth,
             messageLoader = messageLoader,
         ).startServer()
+
+    private fun googleOauth(
+        tokenServerUrl: URI,
+        clientId: String,
+        clientSecret: String,
+    ) = GoogleOauth(
+        serverBaseUrl = null,
+        tokenServerUrl = tokenServerUrl,
+        clientId = clientId,
+        clientSecret = clientSecret,
+    )
 }
 
 private fun Page.navigateHome(

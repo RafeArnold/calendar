@@ -38,10 +38,15 @@ dependencies {
     implementation("org.flywaydb:flyway-core:10.17.0")
     implementation("org.xerial:sqlite-jdbc:3.46.0.1")
 
+    implementation("com.google.api-client:google-api-client:2.6.0")
+
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
     testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter-params")
     testImplementation("com.microsoft.playwright:playwright:1.46.0")
+    testImplementation("org.wiremock:wiremock-jetty12:3.9.1")
+    testImplementation("com.auth0:java-jwt:4.4.0")
 }
 
 val dbFile: Path = Files.createTempFile("calendar", ".db")
