@@ -439,12 +439,7 @@ class EndToEndTests {
 
             // Authenticate
             val authCode = UUID.randomUUID().toString()
-            authServer.stubTokenExchange(
-                authCode = authCode,
-                email = allowedEmail,
-                subject = UUID.randomUUID().toString(),
-            )
-            page.navigate(server.oauthUri(code = authCode).toASCIIString())
+            page.login(email = allowedEmail, authCode = authCode, authServer = authServer)
 
             // Client was redirected to the home page after authenticating.
             assertThat(page).hasURL(server.uri("/").toASCIIString())
@@ -468,6 +463,92 @@ class EndToEndTests {
             // No more requests made to the auth server after the token is exchanged.
             assertEquals(0, authServer.serveEvents.requests.size)
         }
+    }
+
+    @Test
+    fun `user data is persisted across sessions`() {
+        val today = LocalDate.of(2024, 8, 31)
+        val clock = today.toClock()
+        GoogleOAuthServer(
+            clock = clock,
+            clientId = UUID.randomUUID().toString(),
+            clientSecret = UUID.randomUUID().toString(),
+        ).use { authServer ->
+            val userEmail = "test@example.com"
+            val googleSubjectId = UUID.randomUUID().toString()
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
+            server = startServer(clock = clock, auth = auth) { "something sweet" }
+
+            val page1 = browser.newPage()
+            page1.login(email = userEmail, googleSubjectId = googleSubjectId, authServer = authServer)
+            page1.assertCurrentMonthIs(today.toYearMonth())
+            page1.assertOpenedDaysAre(emptyList())
+            page1.clickDay(1)
+            page1.clickBack()
+            page1.clickDay(14)
+            page1.clickBack()
+            page1.assertOpenedDaysAre(listOf(1, 14))
+
+            val page2 = browser.newPage()
+            page2.login(email = userEmail, googleSubjectId = googleSubjectId, authServer = authServer)
+            page2.assertCurrentMonthIs(today.toYearMonth())
+            page2.assertOpenedDaysAre(listOf(1, 14))
+            page2.clickDay(3)
+            page2.clickBack()
+            page2.clickDay(25)
+            page2.clickBack()
+            page2.assertOpenedDaysAre(listOf(1, 3, 14, 25))
+        }
+    }
+
+    @Test
+    fun `users have individual data`() {
+        val today = LocalDate.of(2024, 8, 31)
+        val clock = today.toClock()
+        GoogleOAuthServer(
+            clock = clock,
+            clientId = UUID.randomUUID().toString(),
+            clientSecret = UUID.randomUUID().toString(),
+        ).use { authServer ->
+            val userEmail1 = "test@example.com"
+            val userEmail2 = "me@gmail.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail1, userEmail2))
+            server = startServer(clock = clock, auth = auth) { "something sweet" }
+
+            val page1 = browser.newPage()
+            page1.login(email = userEmail1, authServer = authServer)
+            page1.assertCurrentMonthIs(today.toYearMonth())
+            page1.assertOpenedDaysAre(emptyList())
+            page1.clickDay(1)
+            page1.clickBack()
+            page1.clickDay(14)
+            page1.clickBack()
+            page1.assertOpenedDaysAre(listOf(1, 14))
+
+            val page2 = browser.newPage()
+            page2.login(email = userEmail2, authServer = authServer)
+            page2.assertCurrentMonthIs(today.toYearMonth())
+            page2.assertOpenedDaysAre(emptyList())
+            page2.clickDay(3)
+            page2.clickBack()
+            page2.clickDay(25)
+            page2.clickBack()
+            page2.assertOpenedDaysAre(listOf(3, 25))
+
+            page1.clickDay(6)
+            page1.clickBack()
+            page1.assertOpenedDaysAre(listOf(1, 6, 14))
+        }
+    }
+
+    private fun Page.login(
+        email: String,
+        googleSubjectId: String = UUID.randomUUID().toString(),
+        authCode: String = UUID.randomUUID().toString(),
+        authServer: GoogleOAuthServer,
+    ) {
+        authServer.stubTokenExchange(authCode = authCode, email = email, subject = googleSubjectId)
+        navigate(server.oauthUri(code = authCode).toASCIIString())
     }
 
     private fun Page.assertMonthImageIs(
