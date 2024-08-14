@@ -15,6 +15,8 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.KeyPairGenerator
 import java.security.interfaces.RSAKey
+import java.sql.DriverManager
+import java.sql.Statement
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -48,6 +50,8 @@ class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : Mes
     override fun get(date: LocalDate): String? = messages[date]
 }
 
+fun Http4kServer.oauthUri(code: String?): URI = uri("/oauth/code" + if (code != null) "?code=$code" else "")
+
 fun Http4kServer.dayUri(day: LocalDate): URI = uri("/day/${day.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
 
 fun Http4kServer.uri(path: String): URI = URI.create("http://localhost:${port()}").resolve(path)
@@ -59,13 +63,17 @@ fun copyImage(
     Files.copy(Path("src/test/resources/images").resolve(source), target, StandardCopyOption.REPLACE_EXISTING)
 }
 
-class GoogleOAuthServer(private val clock: Clock = Clock.systemUTC()) : WireMockServer(0), AutoCloseable {
+class GoogleOAuthServer(
+    private val clock: Clock = Clock.systemUTC(),
+    private val clientId: String,
+    private val clientSecret: String,
+) : WireMockServer(0), AutoCloseable {
     init {
         start()
     }
 
     fun stubTokenExchange(
-        clientId: String,
+        authCode: String,
         email: String,
         subject: String,
     ) {
@@ -91,14 +99,13 @@ class GoogleOAuthServer(private val clock: Clock = Clock.systemUTC()) : WireMock
             }"""
         stubFor(
             WireMock.post(WireMock.urlPathEqualTo("/token"))
+                .withFormParam("code", WireMock.equalTo(authCode))
                 .willReturn(ResponseDefinitionBuilder.responseDefinition().withStatus(200).withBody(tokenJson)),
         )
     }
 
-    fun verifyTokenExchanged(
+    fun verifyTokenWasExchanged(
         authCode: String,
-        clientId: String,
-        clientSecret: String,
         redirectUri: String,
     ) {
         verify(
@@ -128,3 +135,8 @@ data object NoAuth : AuthConfig {
                 org.http4k.routing.routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
         }
 }
+
+fun <T> executeStatement(
+    dbUrl: String,
+    execute: (Statement) -> T,
+): T = DriverManager.getConnection(dbUrl).use { connection -> connection.createStatement().use(execute) }

@@ -18,7 +18,8 @@ fun main() {
                 serverBaseUrl = URI("http://localhost:8080"),
                 tokenServerUrl = null,
                 clientId = "",
-                clientSecret = "", // TODO
+                clientSecret = "",
+                allowedUserEmails = emptyList(), // TODO
             ),
     ) { "something sweet" }
         .startServer().block()

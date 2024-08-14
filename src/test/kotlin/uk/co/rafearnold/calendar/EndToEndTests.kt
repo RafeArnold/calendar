@@ -416,23 +416,20 @@ class EndToEndTests {
 
     @Test
     fun `calendar is accessible after authenticating`() {
-        GoogleOAuthServer().use { authServer ->
-            val today = LocalDate.of(2024, 8, 10)
-            val clientId = UUID.randomUUID().toString()
-            val clientSecret = UUID.randomUUID().toString()
+        val today = LocalDate.of(2024, 8, 10)
+        val clock = today.toClock()
+        val clientId = UUID.randomUUID().toString()
+        val clientSecret = UUID.randomUUID().toString()
+        GoogleOAuthServer(clock = clock, clientId = clientId, clientSecret = clientSecret).use { authServer ->
+            val allowedEmail = "test@example.com"
             val auth =
                 googleOauth(
                     tokenServerUrl = URI(authServer.baseUrl() + "/token"),
                     clientId = clientId,
                     clientSecret = clientSecret,
+                    allowedUserEmails = listOf(allowedEmail),
                 )
-            server = startServer(clock = today.toClock(), auth = auth) { "something sweet" }
-            authServer.stubTokenExchange(
-                clientId = clientId,
-                email = "test@example.com",
-                subject = UUID.randomUUID().toString(),
-            )
-
+            server = startServer(clock = clock, auth = auth) { "something sweet" }
             val page = browser.newPage()
 
             // Before authenticating
@@ -446,16 +443,19 @@ class EndToEndTests {
 
             // Authenticate
             val authCode = UUID.randomUUID().toString()
-            page.navigate(server.uri("/oauth/code?code=$authCode").toASCIIString())
+            authServer.stubTokenExchange(
+                authCode = authCode,
+                email = allowedEmail,
+                subject = UUID.randomUUID().toString(),
+            )
+            page.navigate(server.oauthUri(code = authCode).toASCIIString())
 
             // Client was redirected to the home page after authenticating.
             assertThat(page).hasURL(server.uri("/").toASCIIString())
 
-            authServer.verifyTokenExchanged(
+            authServer.verifyTokenWasExchanged(
                 authCode = authCode,
-                clientId = clientId,
-                clientSecret = clientSecret,
-                redirectUri = server.uri("/oauth/code").toASCIIString(),
+                redirectUri = server.oauthUri(code = null).toASCIIString(),
             )
             // The only request sent to the auth server was the token exchange request.
             assertEquals(1, authServer.serveEvents.requests.size)
@@ -506,11 +506,13 @@ class EndToEndTests {
         tokenServerUrl: URI,
         clientId: String,
         clientSecret: String,
+        allowedUserEmails: List<String>,
     ) = GoogleOauth(
         serverBaseUrl = null,
         tokenServerUrl = tokenServerUrl,
         clientId = clientId,
         clientSecret = clientSecret,
+        allowedUserEmails = allowedUserEmails,
     )
 }
 

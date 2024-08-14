@@ -1,6 +1,7 @@
 package uk.co.rafearnold.calendar
 
 import org.http4k.core.Uri
+import org.http4k.core.cookie.Cookie
 import org.http4k.core.queries
 import org.http4k.core.toParametersMap
 import org.http4k.server.Http4kServer
@@ -9,11 +10,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
+import java.sql.Statement
 import java.time.Clock
 import java.time.LocalDate
 import java.util.UUID
@@ -74,7 +77,7 @@ class HttpTests {
     @ValueSource(strings = ["/", "/day/2024-08-08", "/days"])
     fun `user is redirected to login on entry`() {
         val clientId = UUID.randomUUID().toString()
-        server = startServer(auth = googleOauth(clientId))
+        server = startServer(auth = googleOauth(clientId = clientId))
 
         val response = httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
         assertEquals(302, response.statusCode())
@@ -86,13 +89,98 @@ class HttpTests {
         val queryParameters = location.queries().toParametersMap()
         assertEquals(setOf("response_type", "redirect_uri", "client_id", "scope"), queryParameters.keys)
         assertEquals(listOf("code"), queryParameters["response_type"])
-        assertEquals(listOf(server.uri("/oauth/code").toASCIIString()), queryParameters["redirect_uri"])
+        assertEquals(listOf(server.oauthUri(code = null).toASCIIString()), queryParameters["redirect_uri"])
         assertEquals(listOf(clientId), queryParameters["client_id"])
         assertEquals(listOf("openid profile email"), queryParameters["scope"])
     }
 
+    @Test
+    fun `only allowed users can authenticate`() {
+        val clientId = UUID.randomUUID().toString()
+        val clientSecret = UUID.randomUUID().toString()
+        GoogleOAuthServer(clientId = clientId, clientSecret = clientSecret).use { authServer ->
+            val allowedUserEmail1 = "imgood@example.com"
+            val allowedUserEmail2 = "alloweduser@gmail.com"
+            val auth =
+                googleOauth(
+                    tokenServerUrl = URI(authServer.baseUrl() + "/token"),
+                    clientId = clientId,
+                    clientSecret = clientSecret,
+                    allowedUserEmails = listOf(allowedUserEmail1, allowedUserEmail2),
+                )
+            server = startServer(auth = auth)
+
+            fun dbUserCount(): Int =
+                executeStatement { statement ->
+                    statement.executeQuery("SELECT COUNT(*) FROM users").use { result ->
+                        result.next()
+                        result.getInt(1)
+                    }
+                }
+
+            fun reset() {
+                executeStatement { statement ->
+                    @Suppress("SqlWithoutWhere")
+                    statement.executeUpdate("DELETE FROM users")
+                }
+                assertEquals(0, dbUserCount())
+                authServer.resetRequests()
+            }
+
+            fun assertAuthenticationSucceeds(email: String) {
+                val authCode = UUID.randomUUID().toString()
+                val response = login(email = email, authCode = authCode, authServer)
+                assertEquals(302, response.statusCode())
+                assertEquals("", response.body())
+                assertEquals(listOf("/"), response.headers().allValues("location"))
+                assertEquals(
+                    listOf("id_token"),
+                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name },
+                )
+                authServer.verifyTokenWasExchanged(
+                    authCode = authCode,
+                    redirectUri = server.oauthUri(code = null).toASCIIString(),
+                )
+                assertEquals(1, dbUserCount())
+            }
+
+            fun assertAuthenticationFails(email: String) {
+                val authCode = UUID.randomUUID().toString()
+                val response = login(email = email, authCode = authCode, authServer)
+                assertEquals(403, response.statusCode())
+                assertEquals("", response.body())
+                assertEquals(emptyList(), response.headers().allValues("set-cookie"))
+                authServer.verifyTokenWasExchanged(
+                    authCode = authCode,
+                    redirectUri = server.oauthUri(code = null).toASCIIString(),
+                )
+                assertEquals(0, dbUserCount())
+            }
+
+            assertAuthenticationSucceeds(allowedUserEmail1)
+            reset()
+            assertAuthenticationFails("bademail@example.com")
+            reset()
+            assertAuthenticationSucceeds(allowedUserEmail2)
+            reset()
+            assertAuthenticationFails("disalloweduser@gamil.com")
+        }
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
+
+    private fun login(
+        email: String,
+        authCode: String,
+        authServer: GoogleOAuthServer,
+    ): HttpResponse<String> {
+        authServer.stubTokenExchange(authCode = authCode, email = email, subject = UUID.randomUUID().toString())
+        return httpClient.send(
+            HttpRequest.newBuilder(server.oauthUri(code = authCode)).GET().build(),
+            BodyHandlers.ofString(),
+        )
+    }
 
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
@@ -106,11 +194,18 @@ class HttpTests {
             auth = auth,
         ) { "whatever" }.startServer()
 
-    private fun googleOauth(clientId: String) =
-        GoogleOauth(
-            serverBaseUrl = null,
-            tokenServerUrl = null,
-            clientId = clientId,
-            clientSecret = UUID.randomUUID().toString(),
-        )
+    private fun googleOauth(
+        tokenServerUrl: URI? = null,
+        clientId: String,
+        clientSecret: String = UUID.randomUUID().toString(),
+        allowedUserEmails: Collection<String> = emptyList(),
+    ) = GoogleOauth(
+        serverBaseUrl = null,
+        tokenServerUrl = tokenServerUrl,
+        clientId = clientId,
+        clientSecret = clientSecret,
+        allowedUserEmails = allowedUserEmails,
+    )
+
+    private fun <T> executeStatement(execute: (Statement) -> T): T = executeStatement(dbUrl = dbUrl, execute)
 }

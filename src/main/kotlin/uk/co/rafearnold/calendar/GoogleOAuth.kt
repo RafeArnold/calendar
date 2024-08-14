@@ -21,13 +21,13 @@ import org.http4k.lens.RequestContextLens
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
 import java.net.URI
-import java.time.Instant
 
 data class GoogleOauth(
     val serverBaseUrl: URI?,
     val tokenServerUrl: URI?,
     val clientId: String,
     val clientSecret: String,
+    val allowedUserEmails: Collection<String>,
 ) : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
@@ -43,7 +43,7 @@ data class GoogleOauth(
                         clientSecret = clientSecret,
                     )
                 return org.http4k.routing.routes(
-                    GoogleOAuthCallback(oauth, userRepository),
+                    GoogleOAuthCallback(oauth, userRepository, allowedUserEmails = allowedUserEmails),
                     org.http4k.routing.routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
                 )
             }
@@ -77,27 +77,34 @@ private class AuthenticateViaGoogle(
 
 private val codeQuery = Query.required("code")
 
+private const val CALLBACK_PATH = "/oauth/code"
+
 private class GoogleOAuthCallback(
     private val oauth: OAuth,
     private val userRepository: UserRepository,
-) : RoutingHttpHandler by "/oauth/code" bind GET to { request ->
+    private val allowedUserEmails: Collection<String>,
+) : RoutingHttpHandler by CALLBACK_PATH bind GET to { request ->
         val authCode = codeQuery(request)
         val tokenResponse =
             oauth.authFlow.newTokenRequest(authCode).setRedirectUri(oauth.redirectUri(request)).execute()
         val idToken = tokenResponse.parseIdToken()
-        userRepository.createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
-        Response(Status.FOUND).header("location", "/")
-            .cookie(
-                Cookie(
-                    name = ID_TOKEN_COOKIE_NAME,
-                    value = tokenResponse.idToken,
-                    expires = Instant.ofEpochSecond(idToken.payload.expirationTimeSeconds),
-                    path = "/",
-                    secure = true,
-                    httpOnly = true,
-                    sameSite = SameSite.Strict,
-                ),
-            )
+        if (!allowedUserEmails.contains(idToken.payload.email)) {
+            Response(Status.FORBIDDEN)
+        } else {
+            userRepository
+                .createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
+            Response(Status.FOUND).header("location", "/")
+                .cookie(
+                    Cookie(
+                        name = ID_TOKEN_COOKIE_NAME,
+                        value = tokenResponse.idToken,
+                        path = "/",
+                        secure = true,
+                        httpOnly = true,
+                        sameSite = SameSite.Strict,
+                    ),
+                )
+        }
     }
 
 private class OAuth(serverBaseUrl: URI?, tokenServerUrl: URI?, clientId: String, clientSecret: String) {
@@ -119,5 +126,5 @@ private class OAuth(serverBaseUrl: URI?, tokenServerUrl: URI?, clientId: String,
     fun redirectUri(request: Request): String =
         (redirectUri ?: URI("http://${HOST(request)}").redirectUri()).toASCIIString()
 
-    fun URI.redirectUri(): URI = resolve("/oauth/code")
+    fun URI.redirectUri(): URI = resolve(CALLBACK_PATH)
 }
