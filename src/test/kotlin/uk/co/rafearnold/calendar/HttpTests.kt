@@ -101,22 +101,8 @@ class HttpTests {
         GoogleOAuthServer(clientId = clientId, clientSecret = clientSecret).use { authServer ->
             val allowedUserEmail1 = "imgood@example.com"
             val allowedUserEmail2 = "alloweduser@gmail.com"
-            val auth =
-                googleOauth(
-                    tokenServerUrl = URI(authServer.baseUrl() + "/token"),
-                    clientId = clientId,
-                    clientSecret = clientSecret,
-                    allowedUserEmails = listOf(allowedUserEmail1, allowedUserEmail2),
-                )
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(allowedUserEmail1, allowedUserEmail2))
             server = startServer(auth = auth)
-
-            fun dbUserCount(): Int =
-                executeStatement { statement ->
-                    statement.executeQuery("SELECT COUNT(*) FROM users").use { result ->
-                        result.next()
-                        result.getInt(1)
-                    }
-                }
 
             fun reset() {
                 executeStatement { statement ->
@@ -167,6 +153,33 @@ class HttpTests {
         }
     }
 
+    @Test
+    fun `logging in as the same user multiple times doesnt create multiple users`() {
+        GoogleOAuthServer(
+            clientId = UUID.randomUUID().toString(),
+            clientSecret = UUID.randomUUID().toString(),
+        ).use { authServer ->
+            val userEmail = "test@gmail.com"
+            server = startServer(auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail)))
+
+            fun assertLoginSucceeds() {
+                val response =
+                    login(email = userEmail, authCode = UUID.randomUUID().toString(), authServer = authServer)
+                assertEquals(302, response.statusCode())
+                assertEquals(
+                    listOf("id_token"),
+                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name },
+                )
+            }
+
+            assertEquals(0, dbUserCount())
+            assertLoginSucceeds()
+            assertEquals(1, dbUserCount())
+            assertLoginSucceeds()
+            assertEquals(1, dbUserCount())
+        }
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -181,6 +194,14 @@ class HttpTests {
             BodyHandlers.ofString(),
         )
     }
+
+    private fun dbUserCount(): Int =
+        executeStatement { statement ->
+            statement.executeQuery("SELECT COUNT(*) FROM users").use { result ->
+                result.next()
+                result.getInt(1)
+            }
+        }
 
     private fun startServer(
         clock: Clock = Clock.systemUTC(),

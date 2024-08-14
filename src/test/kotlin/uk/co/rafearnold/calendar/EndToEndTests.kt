@@ -418,17 +418,13 @@ class EndToEndTests {
     fun `calendar is accessible after authenticating`() {
         val today = LocalDate.of(2024, 8, 10)
         val clock = today.toClock()
-        val clientId = UUID.randomUUID().toString()
-        val clientSecret = UUID.randomUUID().toString()
-        GoogleOAuthServer(clock = clock, clientId = clientId, clientSecret = clientSecret).use { authServer ->
+        GoogleOAuthServer(
+            clock = clock,
+            clientId = UUID.randomUUID().toString(),
+            clientSecret = UUID.randomUUID().toString(),
+        ).use { authServer ->
             val allowedEmail = "test@example.com"
-            val auth =
-                googleOauth(
-                    tokenServerUrl = URI(authServer.baseUrl() + "/token"),
-                    clientId = clientId,
-                    clientSecret = clientSecret,
-                    allowedUserEmails = listOf(allowedEmail),
-                )
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(allowedEmail))
             server = startServer(clock = clock, auth = auth) { "something sweet" }
             val page = browser.newPage()
 
@@ -501,19 +497,6 @@ class EndToEndTests {
             auth = auth,
             messageLoader = messageLoader,
         ).startServer()
-
-    private fun googleOauth(
-        tokenServerUrl: URI,
-        clientId: String,
-        clientSecret: String,
-        allowedUserEmails: List<String>,
-    ) = GoogleOauth(
-        serverBaseUrl = null,
-        tokenServerUrl = tokenServerUrl,
-        clientId = clientId,
-        clientSecret = clientSecret,
-        allowedUserEmails = allowedUserEmails,
-    )
 }
 
 private fun Page.navigateHome(

@@ -72,6 +72,15 @@ class GoogleOAuthServer(
         start()
     }
 
+    fun toAuthConfig(allowedUserEmails: Collection<String>): GoogleOauth =
+        GoogleOauth(
+            serverBaseUrl = null,
+            tokenServerUrl = URI(baseUrl() + "/token"),
+            clientId = clientId,
+            clientSecret = clientSecret,
+            allowedUserEmails = allowedUserEmails,
+        )
+
     fun stubTokenExchange(
         authCode: String,
         email: String,
