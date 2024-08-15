@@ -96,9 +96,7 @@ class HttpTests {
 
     @Test
     fun `only allowed users can authenticate`() {
-        val clientId = UUID.randomUUID().toString()
-        val clientSecret = UUID.randomUUID().toString()
-        GoogleOAuthServer(clientId = clientId, clientSecret = clientSecret).use { authServer ->
+        GoogleOAuthServer().use { authServer ->
             val allowedUserEmail1 = "imgood@example.com"
             val allowedUserEmail2 = "alloweduser@gmail.com"
             val auth = authServer.toAuthConfig(allowedUserEmails = listOf(allowedUserEmail1, allowedUserEmail2))
@@ -155,10 +153,7 @@ class HttpTests {
 
     @Test
     fun `logging in as the same user multiple times doesnt create multiple users`() {
-        GoogleOAuthServer(
-            clientId = UUID.randomUUID().toString(),
-            clientSecret = UUID.randomUUID().toString(),
-        ).use { authServer ->
+        GoogleOAuthServer().use { authServer ->
             val userEmail = "test@gmail.com"
             server = startServer(auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail)))
 
@@ -222,6 +217,7 @@ class HttpTests {
         allowedUserEmails: Collection<String> = emptyList(),
     ) = GoogleOauth(
         serverBaseUrl = null,
+        authServerUrl = null,
         tokenServerUrl = tokenServerUrl,
         clientId = clientId,
         clientSecret = clientSecret,

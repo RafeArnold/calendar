@@ -5,8 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import com.github.tomakehurst.wiremock.client.WireMock
-import org.http4k.lens.RequestContextLens
-import org.http4k.routing.RoutingHttpHandler
+import com.github.tomakehurst.wiremock.verification.LoggedRequest
 import org.http4k.server.Http4kServer
 import org.intellij.lang.annotations.Language
 import java.net.URI
@@ -25,6 +24,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import kotlin.io.path.Path
 import kotlin.random.Random
 
@@ -65,17 +65,26 @@ fun copyImage(
 
 class GoogleOAuthServer(
     private val clock: Clock = Clock.systemUTC(),
-    private val clientId: String,
-    private val clientSecret: String,
+    private val clientId: String = UUID.randomUUID().toString(),
+    private val clientSecret: String = UUID.randomUUID().toString(),
 ) : WireMockServer(0), AutoCloseable {
     init {
         start()
     }
 
+    companion object {
+        private const val TOKEN_EXCHANGE_PATH = "/token"
+        private const val AUTHENTICATION_PAGE_PATH = "/oauth/auth"
+        const val LOGIN_BUTTON_TEST_ID: String = "login-button"
+    }
+
+    val authenticationPageUrl: String = baseUrl() + AUTHENTICATION_PAGE_PATH
+
     fun toAuthConfig(allowedUserEmails: Collection<String>): GoogleOauth =
         GoogleOauth(
             serverBaseUrl = null,
-            tokenServerUrl = URI(baseUrl() + "/token"),
+            authServerUrl = URI(authenticationPageUrl),
+            tokenServerUrl = URI(baseUrl() + TOKEN_EXCHANGE_PATH),
             clientId = clientId,
             clientSecret = clientSecret,
             allowedUserEmails = allowedUserEmails,
@@ -107,7 +116,7 @@ class GoogleOAuthServer(
               "refresh_token": "1//xEoDL4iW3cxlI7yDbSRFYNG01kVKM2C-259HOF2aQbI"
             }"""
         stubFor(
-            WireMock.post(WireMock.urlPathEqualTo("/token"))
+            WireMock.post(WireMock.urlPathEqualTo(TOKEN_EXCHANGE_PATH))
                 .withFormParam("code", WireMock.equalTo(authCode))
                 .willReturn(ResponseDefinitionBuilder.responseDefinition().withStatus(200).withBody(tokenJson)),
         )
@@ -119,7 +128,7 @@ class GoogleOAuthServer(
     ) {
         verify(
             1,
-            WireMock.postRequestedFor(WireMock.urlEqualTo("/token"))
+            WireMock.postRequestedFor(WireMock.urlEqualTo(TOKEN_EXCHANGE_PATH))
                 .withHeader("content-type", WireMock.containing("application/x-www-form-urlencoded"))
                 .withFormParam("client_id", WireMock.equalTo(clientId))
                 .withFormParam("client_secret", WireMock.equalTo(clientSecret))
@@ -129,20 +138,34 @@ class GoogleOAuthServer(
         )
     }
 
+    fun allTokenExchangeServedRequests(): List<LoggedRequest> =
+        findAll(WireMock.postRequestedFor(WireMock.urlEqualTo(TOKEN_EXCHANGE_PATH)))
+
+    fun stubAuthenticationPage(
+        redirectUri: URI,
+        authCode: String,
+    ) {
+        @Language("HTML")
+        val html = """
+            <form method="get" action="${redirectUri.toASCIIString()}">
+                <input type="hidden" name="code" value="$authCode">
+                <button data-testid="$LOGIN_BUTTON_TEST_ID" type="submit">log me in</button>
+            </form>
+        """
+        stubFor(
+            WireMock.get(WireMock.urlPathEqualTo(AUTHENTICATION_PAGE_PATH))
+                .willReturn(
+                    ResponseDefinitionBuilder.responseDefinition()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "text/html")
+                        .withBody(html),
+                ),
+        )
+    }
+
     override fun close() {
         stop()
     }
-}
-
-data object NoAuth : AuthConfig {
-    override fun createHandlerFactory(
-        userRepository: UserRepository,
-        userLens: RequestContextLens<User>,
-    ): RoutingHandlerFactory =
-        object : RoutingHandlerFactory {
-            override fun routes(vararg list: RoutingHttpHandler): RoutingHttpHandler =
-                org.http4k.routing.routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
-        }
 }
 
 fun <T> executeStatement(

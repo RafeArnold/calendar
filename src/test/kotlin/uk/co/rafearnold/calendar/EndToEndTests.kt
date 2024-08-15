@@ -5,7 +5,6 @@ import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
-import com.microsoft.playwright.options.RequestOptions
 import org.http4k.core.Uri
 import org.http4k.core.findSingle
 import org.http4k.core.queries
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
@@ -35,8 +33,6 @@ import kotlin.io.path.readBytes
 import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 class EndToEndTests {
     companion object {
@@ -418,24 +414,11 @@ class EndToEndTests {
     fun `calendar is accessible after authenticating`() {
         val today = LocalDate.of(2024, 8, 10)
         val clock = today.toClock()
-        GoogleOAuthServer(
-            clock = clock,
-            clientId = UUID.randomUUID().toString(),
-            clientSecret = UUID.randomUUID().toString(),
-        ).use { authServer ->
+        GoogleOAuthServer(clock = clock).use { authServer ->
             val allowedEmail = "test@example.com"
             val auth = authServer.toAuthConfig(allowedUserEmails = listOf(allowedEmail))
             server = startServer(clock = clock, auth = auth) { "something sweet" }
             val page = browser.newPage()
-
-            // Before authenticating
-            val response =
-                page.request().get(server.uri("/").toASCIIString(), RequestOptions.create().setMaxRedirects(0))
-            assertThat(response).not().isOK()
-            assertEquals(302, response.status())
-            val locationUrl = response.headers()["location"]?.let { URI(it) }
-            assertNotNull(locationUrl)
-            assertTrue(locationUrl.toASCIIString().startsWith("https://accounts.google.com/o/oauth2/auth"))
 
             // Authenticate
             val authCode = UUID.randomUUID().toString()
@@ -448,8 +431,8 @@ class EndToEndTests {
                 authCode = authCode,
                 redirectUri = server.oauthUri(code = null).toASCIIString(),
             )
-            // The only request sent to the auth server was the token exchange request.
-            assertEquals(1, authServer.serveEvents.requests.size)
+            // Only one token exchange request was sent to the auth server.
+            assertEquals(1, authServer.allTokenExchangeServedRequests().size)
             authServer.resetRequests()
 
             // Verify that the app works as expected.
@@ -469,11 +452,7 @@ class EndToEndTests {
     fun `user data is persisted across sessions`() {
         val today = LocalDate.of(2024, 8, 31)
         val clock = today.toClock()
-        GoogleOAuthServer(
-            clock = clock,
-            clientId = UUID.randomUUID().toString(),
-            clientSecret = UUID.randomUUID().toString(),
-        ).use { authServer ->
+        GoogleOAuthServer(clock = clock).use { authServer ->
             val userEmail = "test@example.com"
             val googleSubjectId = UUID.randomUUID().toString()
             val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
@@ -505,11 +484,7 @@ class EndToEndTests {
     fun `users have individual data`() {
         val today = LocalDate.of(2024, 8, 31)
         val clock = today.toClock()
-        GoogleOAuthServer(
-            clock = clock,
-            clientId = UUID.randomUUID().toString(),
-            clientSecret = UUID.randomUUID().toString(),
-        ).use { authServer ->
+        GoogleOAuthServer(clock = clock).use { authServer ->
             val userEmail1 = "test@example.com"
             val userEmail2 = "me@gmail.com"
             val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail1, userEmail2))
@@ -541,14 +516,35 @@ class EndToEndTests {
         }
     }
 
+    @Test
+    fun `user can logout`() {
+        GoogleOAuthServer().use { authServer ->
+            val userEmail = "test@gmail.com"
+            val authConfig = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
+            server = startServer(auth = authConfig) { "whatever" }
+            val page = browser.newPage()
+            page.login(email = userEmail, authCode = UUID.randomUUID().toString(), authServer = authServer)
+            assertThat(page.calendar()).isVisible()
+            page.clickLogout()
+            page.assertIsOnAuthenticationPage(authServer)
+            page.navigate(server.uri("/").toASCIIString())
+            page.assertIsOnAuthenticationPage(authServer)
+        }
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
         authCode: String = UUID.randomUUID().toString(),
         authServer: GoogleOAuthServer,
     ) {
+        authServer.stubAuthenticationPage(redirectUri = server.oauthUri(code = null), authCode = authCode)
         authServer.stubTokenExchange(authCode = authCode, email = email, subject = googleSubjectId)
-        navigate(server.oauthUri(code = authCode).toASCIIString())
+        navigate(server.uri("/").toASCIIString())
+        assertIsOnAuthenticationPage(authServer)
+        val loginButton = getByTestId(GoogleOAuthServer.LOGIN_BUTTON_TEST_ID)
+        assertThat(loginButton).isVisible()
+        loginButton.click()
     }
 
     private fun Page.assertMonthImageIs(
@@ -660,6 +656,10 @@ private fun Page.assertThatDayTextIs(text: String) {
     assertThat(dayText()).hasText(text)
 }
 
+private fun Page.assertIsOnAuthenticationPage(authServer: GoogleOAuthServer) {
+    assertThat(this).hasURL("^${authServer.authenticationPageUrl}.*".toPattern())
+}
+
 private fun Page.clickDay(dayNum: Int) {
     assertThat(dayText()).not().isVisible()
     assertThat(day(dayNum)).hasText(dayNum.toString())
@@ -688,6 +688,11 @@ private fun Page.clickToday() {
     todayButton().click()
 }
 
+private fun Page.clickLogout() {
+    assertThat(logoutButton()).isVisible()
+    logoutButton().click()
+}
+
 private fun Page.calendar(): Locator = getByTestId("calendar")
 
 private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
@@ -703,3 +708,5 @@ private fun Page.nextMonthButton(): Locator = getByTestId("next-month")
 private fun Page.todayButton(): Locator = getByTestId("today")
 
 private fun Page.monthYear(): Locator = getByTestId("month-year")
+
+private fun Page.logoutButton(): Locator = getByTestId("logout")

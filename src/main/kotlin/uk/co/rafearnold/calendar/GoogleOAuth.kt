@@ -14,16 +14,19 @@ import org.http4k.core.Status
 import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.cookie.cookie
+import org.http4k.core.cookie.invalidateCookie
 import org.http4k.lens.Cookies
 import org.http4k.lens.Header
 import org.http4k.lens.Query
 import org.http4k.lens.RequestContextLens
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
+import org.http4k.routing.routes
 import java.net.URI
 
 data class GoogleOauth(
     val serverBaseUrl: URI?,
+    val authServerUrl: URI?,
     val tokenServerUrl: URI?,
     val clientId: String,
     val clientSecret: String,
@@ -33,21 +36,22 @@ data class GoogleOauth(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
     ): RoutingHandlerFactory =
-        object : RoutingHandlerFactory {
-            override fun routes(vararg list: RoutingHttpHandler): RoutingHttpHandler {
-                val oauth =
-                    OAuth(
-                        serverBaseUrl = serverBaseUrl,
-                        tokenServerUrl = tokenServerUrl,
-                        clientId = clientId,
-                        clientSecret = clientSecret,
-                    )
-                return org.http4k.routing.routes(
-                    GoogleOAuthCallback(oauth, userRepository, allowedUserEmails = allowedUserEmails),
-                    org.http4k.routing.routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+        RoutingHandlerFactory { list ->
+            val oauth =
+                OAuth(
+                    serverBaseUrl = serverBaseUrl,
+                    authServerUrl = authServerUrl,
+                    tokenServerUrl = tokenServerUrl,
+                    clientId = clientId,
+                    clientSecret = clientSecret,
                 )
-            }
+            routes(
+                GoogleOAuthCallback(oauth, userRepository, allowedUserEmails = allowedUserEmails),
+                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+            )
         }
+
+    override fun logoutHandler(): HttpHandler = logoutHandler
 }
 
 val HOST = Header.required("host")
@@ -107,7 +111,17 @@ private class GoogleOAuthCallback(
         }
     }
 
-private class OAuth(serverBaseUrl: URI?, tokenServerUrl: URI?, clientId: String, clientSecret: String) {
+private val logoutHandler: HttpHandler = {
+    Response(Status.FOUND).header("location", "/").invalidateCookie(ID_TOKEN_COOKIE_NAME)
+}
+
+private class OAuth(
+    serverBaseUrl: URI?,
+    authServerUrl: URI?,
+    tokenServerUrl: URI?,
+    clientId: String,
+    clientSecret: String,
+) {
     val authFlow: GoogleAuthorizationCodeFlow =
         GoogleAuthorizationCodeFlow
             .Builder(
@@ -118,6 +132,9 @@ private class OAuth(serverBaseUrl: URI?, tokenServerUrl: URI?, clientId: String,
                 listOf("openid profile email"),
             )
             .run { if (tokenServerUrl != null) setTokenServerUrl(GenericUrl(tokenServerUrl)) else this }
+            .run {
+                if (authServerUrl != null) setAuthorizationServerEncodedUrl(authServerUrl.toASCIIString()) else this
+            }
             .build()
 
     private val redirectUri: URI? = serverBaseUrl?.redirectUri()

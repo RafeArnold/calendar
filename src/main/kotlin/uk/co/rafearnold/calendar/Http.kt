@@ -4,12 +4,14 @@ import org.flywaydb.core.Flyway
 import org.http4k.core.Body
 import org.http4k.core.ContentType
 import org.http4k.core.Filter
+import org.http4k.core.HttpHandler
 import org.http4k.core.Method.GET
 import org.http4k.core.RequestContext
 import org.http4k.core.RequestContexts
 import org.http4k.core.Response
 import org.http4k.core.Status
 import org.http4k.core.Status.Companion.FORBIDDEN
+import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Store
@@ -59,9 +61,21 @@ interface AuthConfig {
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
     ): RoutingHandlerFactory
+
+    fun logoutHandler(): HttpHandler
 }
 
-interface RoutingHandlerFactory {
+data object NoAuth : AuthConfig {
+    override fun createHandlerFactory(
+        userRepository: UserRepository,
+        userLens: RequestContextLens<User>,
+    ): RoutingHandlerFactory =
+        RoutingHandlerFactory { list -> routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } } }
+
+    override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
+}
+
+fun interface RoutingHandlerFactory {
     fun routes(vararg list: RoutingHttpHandler): RoutingHttpHandler
 }
 
@@ -88,6 +102,7 @@ fun Config.startServer(): Http4kServer {
                     DayRoute(view, messageLoader, clock, daysRepository, userLens),
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
+            logoutRoute(auth),
         )
     val app =
         Filter { next ->
@@ -183,6 +198,8 @@ class DayRoute(
             }
         }
     }
+
+fun logoutRoute(auth: AuthConfig): RoutingHttpHandler = "/logout" bind GET to auth.logoutHandler()
 
 fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
 
