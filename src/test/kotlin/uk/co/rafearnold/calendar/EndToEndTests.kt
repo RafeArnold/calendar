@@ -429,7 +429,7 @@ class EndToEndTests {
 
             authServer.verifyTokenWasExchanged(
                 authCode = authCode,
-                redirectUri = server.oauthUri(code = null).toASCIIString(),
+                redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
             )
             // Only one token exchange request was sent to the auth server.
             assertEquals(1, authServer.allTokenExchangeServedRequests().size)
@@ -538,7 +538,7 @@ class EndToEndTests {
         authCode: String = UUID.randomUUID().toString(),
         authServer: GoogleOAuthServer,
     ) {
-        authServer.stubAuthenticationPage(redirectUri = server.oauthUri(code = null), authCode = authCode)
+        authServer.stubAuthenticationPage(redirectUri = server.oauthUri(code = null, state = null), authCode = authCode)
         authServer.stubTokenExchange(authCode = authCode, email = email, subject = googleSubjectId)
         navigate(server.uri("/").toASCIIString())
         assertIsOnAuthenticationPage(authServer)

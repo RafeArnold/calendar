@@ -103,7 +103,7 @@ fun Config.startServer(): Http4kServer {
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
             logoutRoute(auth),
-        )
+        ).withFilter(forbiddenFilter)
     val app =
         Filter { next ->
             {
@@ -179,23 +179,20 @@ class DayRoute(
     user: RequestContextLens<User>,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
-        if (date.isAfter(clock.now().toLocalDate())) {
-            Response(FORBIDDEN)
+        if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
+        daysRepo.markDayAsOpened(user(it), date)
+        val message = messageLoader[date]
+        if (message != null) {
+            val month = date.toYearMonth()
+            val viewModel =
+                DayViewModel(
+                    text = message,
+                    backLink = daysLink(month),
+                    dayOfMonth = date.dayOfMonth,
+                )
+            Response(OK).with(view of viewModel)
         } else {
-            daysRepo.markDayAsOpened(user(it), date)
-            val message = messageLoader[date]
-            if (message != null) {
-                val month = date.toYearMonth()
-                val viewModel =
-                    DayViewModel(
-                        text = message,
-                        backLink = daysLink(month),
-                        dayOfMonth = date.dayOfMonth,
-                    )
-                Response(OK).with(view of viewModel)
-            } else {
-                Response(NOT_FOUND)
-            }
+            Response(NOT_FOUND)
         }
     }
 
@@ -212,3 +209,16 @@ private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(mon
 private fun daysLink(month: YearMonth) = "/days?month=" + monthFormatter.format(month)
 
 private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
+
+val forbiddenFilter: Filter =
+    Filter { next ->
+        {
+            try {
+                next(it)
+            } catch (e: ForbiddenException) {
+                Response(FORBIDDEN)
+            }
+        }
+    }
+
+class ForbiddenException : RuntimeException()

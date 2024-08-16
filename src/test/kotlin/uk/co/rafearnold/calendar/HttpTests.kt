@@ -1,13 +1,17 @@
 package uk.co.rafearnold.calendar
 
+import org.http4k.base64DecodedArray
+import org.http4k.base64Encode
 import org.http4k.core.Uri
 import org.http4k.core.cookie.Cookie
+import org.http4k.core.cookie.SameSite
 import org.http4k.core.queries
 import org.http4k.core.toParametersMap
 import org.http4k.server.Http4kServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.net.URI
@@ -18,11 +22,14 @@ import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
 import java.sql.Statement
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
+import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class HttpTests {
     private lateinit var server: Http4kServer
@@ -87,9 +94,12 @@ class HttpTests {
         assertEquals("accounts.google.com", location.authority)
         assertEquals("/o/oauth2/auth", location.path)
         val queryParameters = location.queries().toParametersMap()
-        assertEquals(setOf("response_type", "redirect_uri", "client_id", "scope"), queryParameters.keys)
+        assertEquals(setOf("response_type", "redirect_uri", "client_id", "scope", "state"), queryParameters.keys)
         assertEquals(listOf("code"), queryParameters["response_type"])
-        assertEquals(listOf(server.oauthUri(code = null).toASCIIString()), queryParameters["redirect_uri"])
+        assertEquals(
+            listOf(server.oauthUri(code = null, state = null).toASCIIString()),
+            queryParameters["redirect_uri"],
+        )
         assertEquals(listOf(clientId), queryParameters["client_id"])
         assertEquals(listOf("openid profile email"), queryParameters["scope"])
     }
@@ -118,12 +128,12 @@ class HttpTests {
                 assertEquals("", response.body())
                 assertEquals(listOf("/"), response.headers().allValues("location"))
                 assertEquals(
-                    listOf("id_token"),
-                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name },
+                    setOf("id_token", "auth_csrf_token"),
+                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name }.toSet(),
                 )
                 authServer.verifyTokenWasExchanged(
                     authCode = authCode,
-                    redirectUri = server.oauthUri(code = null).toASCIIString(),
+                    redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
                 )
                 assertEquals(1, dbUserCount())
             }
@@ -136,7 +146,7 @@ class HttpTests {
                 assertEquals(emptyList(), response.headers().allValues("set-cookie"))
                 authServer.verifyTokenWasExchanged(
                     authCode = authCode,
-                    redirectUri = server.oauthUri(code = null).toASCIIString(),
+                    redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
                 )
                 assertEquals(0, dbUserCount())
             }
@@ -162,8 +172,8 @@ class HttpTests {
                     login(email = userEmail, authCode = UUID.randomUUID().toString(), authServer = authServer)
                 assertEquals(302, response.statusCode())
                 assertEquals(
-                    listOf("id_token"),
-                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name },
+                    setOf("id_token", "auth_csrf_token"),
+                    response.headers().allValues("set-cookie").map { Cookie.parse(it)!!.name }.toSet(),
                 )
             }
 
@@ -175,6 +185,161 @@ class HttpTests {
         }
     }
 
+    @Test
+    fun `auth redirect sets csrf token and sets state to token hash`() {
+        GoogleOAuthServer().use { authServer ->
+            val userEmail = "test@gmail.com"
+            val tokenKey = Random.nextBytes(ByteArray(32))
+            val auth =
+                authServer.toAuthConfig(allowedUserEmails = listOf(userEmail), tokenHashKey = tokenKey)
+            server = startServer(auth = auth)
+
+            val redirectResponse =
+                httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
+            assertEquals(302, redirectResponse.statusCode())
+
+            // A CSRF token is set.
+            val tokenCookies =
+                redirectResponse.headers().allValues("set-cookie")
+                    .map { Cookie.parse(it)!! }.filter { it.name == "auth_csrf_token" }
+            assertEquals(1, tokenCookies.size)
+            val tokenCookie = tokenCookies[0]
+            val token = tokenCookie.value
+            val tokenBytes = assertDoesNotThrow { token.base64DecodedArray() }
+            assertEquals(32, tokenBytes.size)
+            assertEquals(300, tokenCookie.maxAge)
+            assertTrue(tokenCookie.httpOnly)
+            assertEquals(SameSite.Lax, tokenCookie.sameSite)
+
+            val tokenHash = hmacSha256(tokenKey = tokenKey, tokenBytes = tokenBytes).base64Encode()
+
+            // Redirect contains token hash.
+            val location = redirectResponse.headers().firstValue("location").map { Uri.of(it) }.getOrNull()
+            assertNotNull(location)
+            val queryParameters = location.queries().toParametersMap()
+            val state = queryParameters["state"]?.filterNotNull()
+            assertNotNull(state)
+            assertEquals(1, state.size)
+            assertEquals(tokenHash, state[0])
+        }
+    }
+
+    @Test
+    fun `state value is validated during authentication`() {
+        GoogleOAuthServer().use { authServer ->
+            val userEmail = "test@gmail.com"
+            val tokenKey = Random.nextBytes(ByteArray(32))
+            val auth =
+                authServer.toAuthConfig(allowedUserEmails = listOf(userEmail), tokenHashKey = tokenKey)
+            server = startServer(auth = auth)
+
+            fun assertAuthenticationFails(
+                csrfToken: String?,
+                state: String?,
+                authServer: GoogleOAuthServer,
+            ) {
+                val authCode = UUID.randomUUID().toString()
+                val response =
+                    login(email = userEmail, authCode = authCode, csrfToken = csrfToken, state = state, authServer)
+                assertEquals(403, response.statusCode())
+                assertEquals("", response.body())
+                assertEquals(emptyList(), response.headers().allValues("set-cookie"))
+                assertEquals(0, authServer.allTokenExchangeServedRequests().size)
+                assertEquals(0, dbUserCount())
+            }
+
+            fun assertAuthenticationSucceeds(
+                csrfToken: String,
+                state: String,
+                authServer: GoogleOAuthServer,
+            ) {
+                val authCode = UUID.randomUUID().toString()
+                val response =
+                    login(email = userEmail, authCode = authCode, csrfToken = csrfToken, state = state, authServer)
+                assertEquals(302, response.statusCode())
+                assertEquals("", response.body())
+                assertEquals(listOf("/"), response.headers().allValues("location"))
+                val setCookies = response.headers().allValues("set-cookie").map { Cookie.parse(it)!! }
+                assertEquals(setOf("id_token", "auth_csrf_token"), setCookies.map { it.name }.toSet())
+                assertEquals(1, setCookies.filter { it.name == "auth_csrf_token" }.size)
+                val csrfTokenCookie = setCookies.first { it.name == "auth_csrf_token" }
+                assertEquals(0, csrfTokenCookie.maxAge)
+                assertEquals(Instant.EPOCH, csrfTokenCookie.expires)
+                assertEquals("", csrfTokenCookie.value)
+                authServer.verifyTokenWasExchanged(
+                    authCode = authCode,
+                    redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
+                )
+                assertEquals(1, dbUserCount())
+            }
+
+            val csrfToken = Random.nextBytes(ByteArray(32))
+            val tokenHash = hmacSha256(tokenKey = tokenKey, tokenBytes = csrfToken)
+
+            // Auth code request without state is rejected.
+            assertAuthenticationFails(csrfToken = csrfToken.base64Encode(), state = null, authServer)
+            // Auth code request with empty state is rejected.
+            assertAuthenticationFails(csrfToken = csrfToken.base64Encode(), state = "", authServer)
+            // Auth code request with state containing invalid base64 is rejected.
+            assertAuthenticationFails(csrfToken = csrfToken.base64Encode(), state = "not base64", authServer)
+            // Auth code request with state containing token hash signed with incorrect key is rejected.
+            assertAuthenticationFails(
+                csrfToken = csrfToken.base64Encode(),
+                state = hmacSha256(tokenKey = Random.nextBytes(ByteArray(32)), tokenBytes = csrfToken).base64Encode(),
+                authServer,
+            )
+            // Auth code request with state containing incorrect token hash signed with correct key is rejected.
+            assertAuthenticationFails(
+                csrfToken = csrfToken.base64Encode(),
+                state = hmacSha256(tokenKey = tokenKey, tokenBytes = Random.nextBytes(ByteArray(32))).base64Encode(),
+                authServer,
+            )
+            // Auth code request without token cookie is rejected.
+            assertAuthenticationFails(csrfToken = null, state = tokenHash.base64Encode(), authServer)
+            // Auth code request with empty token cookie is rejected.
+            assertAuthenticationFails(csrfToken = "", state = tokenHash.base64Encode(), authServer)
+            // Auth code request with token cookie containing invalid base64 is rejected.
+            assertAuthenticationFails(csrfToken = "not base64", state = tokenHash.base64Encode(), authServer)
+            // Auth code request with token cookie containing incorrect token is rejected.
+            assertAuthenticationFails(
+                csrfToken = Random.nextBytes(ByteArray(32)).base64Encode(),
+                state = tokenHash.base64Encode(),
+                authServer,
+            )
+            // Auth code request with correct token and state succeeds.
+            assertAuthenticationSucceeds(
+                csrfToken = csrfToken.base64Encode(),
+                state = tokenHash.base64Encode(),
+                authServer,
+            )
+        }
+    }
+
+    @Test
+    fun `auth code requests that contain no code are rejected`() {
+        GoogleOAuthServer().use { authServer ->
+            val userEmail = "test@example.com"
+            val tokenKey = Random.nextBytes(ByteArray(32))
+            val auth = googleOauth(allowedUserEmails = listOf(userEmail), tokenHashKey = tokenKey)
+            server = startServer(auth = auth)
+            val csrfToken = Random.nextBytes(ByteArray(32))
+            val tokenHash = hmacSha256(tokenKey = tokenKey, tokenBytes = csrfToken)
+            val response =
+                httpClient.send(
+                    HttpRequest.newBuilder(server.oauthUri(code = null, state = tokenHash.base64Encode()))
+                        .header("cookie", Cookie("auth_csrf_token", csrfToken.base64Encode()).keyValueCookieString())
+                        .GET()
+                        .build(),
+                    BodyHandlers.ofString(),
+                )
+            assertEquals(403, response.statusCode())
+            assertEquals("", response.body())
+            assertEquals(emptyList(), response.headers().allValues("set-cookie"))
+            assertEquals(0, authServer.allTokenExchangeServedRequests().size)
+            assertEquals(0, dbUserCount())
+        }
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -183,9 +348,39 @@ class HttpTests {
         authCode: String,
         authServer: GoogleOAuthServer,
     ): HttpResponse<String> {
+        val response = httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
+        assertEquals(302, response.statusCode())
+        val tokenCookies =
+            response.headers().allValues("set-cookie")
+                .map { Cookie.parse(it)!! }.filter { it.name == "auth_csrf_token" }
+        assertEquals(1, tokenCookies.size)
+        val tokenCookie = tokenCookies[0]
+        val csrfToken = tokenCookie.value
+        val state =
+            response.headers().firstValue("location").map { Uri.of(it) }.get()
+                .queries().toParametersMap()["state"]?.first()!!
+        return login(email = email, authCode = authCode, csrfToken = csrfToken, state = state, authServer = authServer)
+    }
+
+    private fun login(
+        email: String,
+        authCode: String,
+        csrfToken: String?,
+        state: String?,
+        authServer: GoogleOAuthServer,
+    ): HttpResponse<String> {
         authServer.stubTokenExchange(authCode = authCode, email = email, subject = UUID.randomUUID().toString())
         return httpClient.send(
-            HttpRequest.newBuilder(server.oauthUri(code = authCode)).GET().build(),
+            HttpRequest.newBuilder(server.oauthUri(code = authCode, state = state))
+                .run {
+                    if (csrfToken != null) {
+                        header("cookie", Cookie(name = "auth_csrf_token", value = csrfToken).keyValueCookieString())
+                    } else {
+                        this
+                    }
+                }
+                .GET()
+                .build(),
             BodyHandlers.ofString(),
         )
     }
@@ -212,9 +407,10 @@ class HttpTests {
 
     private fun googleOauth(
         tokenServerUrl: URI? = null,
-        clientId: String,
+        clientId: String = UUID.randomUUID().toString(),
         clientSecret: String = UUID.randomUUID().toString(),
         allowedUserEmails: Collection<String> = emptyList(),
+        tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
     ) = GoogleOauth(
         serverBaseUrl = null,
         authServerUrl = null,
@@ -222,6 +418,7 @@ class HttpTests {
         clientId = clientId,
         clientSecret = clientSecret,
         allowedUserEmails = allowedUserEmails,
+        tokenHashKeyBase64 = tokenHashKey.base64Encode(),
     )
 
     private fun <T> executeStatement(execute: (Statement) -> T): T = executeStatement(dbUrl = dbUrl, execute)

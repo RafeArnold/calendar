@@ -6,6 +6,8 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import com.github.tomakehurst.wiremock.client.WireMock
 import com.github.tomakehurst.wiremock.verification.LoggedRequest
+import org.http4k.base64Encode
+import org.http4k.core.toUrlFormEncoded
 import org.http4k.server.Http4kServer
 import org.intellij.lang.annotations.Language
 import java.net.URI
@@ -25,6 +27,8 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import kotlin.io.path.Path
 import kotlin.random.Random
 
@@ -50,7 +54,15 @@ class MapBackedMessageLoader(private val messages: Map<LocalDate, String>) : Mes
     override fun get(date: LocalDate): String? = messages[date]
 }
 
-fun Http4kServer.oauthUri(code: String?): URI = uri("/oauth/code" + if (code != null) "?code=$code" else "")
+fun Http4kServer.oauthUri(
+    code: String?,
+    state: String?,
+): URI = uri("/oauth/code" + listOf("code" to code, "state" to state).toQuery())
+
+private fun List<Pair<String, String?>>.toQuery(): String =
+    filter { it.second != null }.toUrlFormEncoded().prefixIfNotEmpty(prefix = "?")
+
+private fun String.prefixIfNotEmpty(prefix: String): String = if (isEmpty()) this else "$prefix$this"
 
 fun Http4kServer.dayUri(day: LocalDate): URI = uri("/day/${day.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
 
@@ -80,7 +92,10 @@ class GoogleOAuthServer(
 
     val authenticationPageUrl: String = baseUrl() + AUTHENTICATION_PAGE_PATH
 
-    fun toAuthConfig(allowedUserEmails: Collection<String>): GoogleOauth =
+    fun toAuthConfig(
+        allowedUserEmails: Collection<String>,
+        tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
+    ): GoogleOauth =
         GoogleOauth(
             serverBaseUrl = null,
             authServerUrl = URI(authenticationPageUrl),
@@ -88,6 +103,7 @@ class GoogleOAuthServer(
             clientId = clientId,
             clientSecret = clientSecret,
             allowedUserEmails = allowedUserEmails,
+            tokenHashKeyBase64 = tokenHashKey.base64Encode(),
         )
 
     fun stubTokenExchange(
@@ -149,6 +165,7 @@ class GoogleOAuthServer(
         val html = """
             <form method="get" action="${redirectUri.toASCIIString()}">
                 <input type="hidden" name="code" value="$authCode">
+                <input type="hidden" name="state" value="{{request.query.state}}">
                 <button data-testid="$LOGIN_BUTTON_TEST_ID" type="submit">log me in</button>
             </form>
         """
@@ -158,7 +175,8 @@ class GoogleOAuthServer(
                     ResponseDefinitionBuilder.responseDefinition()
                         .withStatus(200)
                         .withHeader("Content-Type", "text/html")
-                        .withBody(html),
+                        .withBody(html)
+                        .withTransformers("response-template"),
                 ),
         )
     }
@@ -172,3 +190,8 @@ fun <T> executeStatement(
     dbUrl: String,
     execute: (Statement) -> T,
 ): T = DriverManager.getConnection(dbUrl).use { connection -> connection.createStatement().use(execute) }
+
+fun hmacSha256(
+    tokenKey: ByteArray,
+    tokenBytes: ByteArray,
+): ByteArray = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(tokenKey, "HmacSHA256")) }.doFinal(tokenBytes)

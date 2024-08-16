@@ -5,6 +5,8 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken
 import com.google.api.client.http.GenericUrl
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
+import org.http4k.base64DecodedArray
+import org.http4k.base64Encode
 import org.http4k.core.Filter
 import org.http4k.core.HttpHandler
 import org.http4k.core.Method.GET
@@ -31,6 +33,7 @@ data class GoogleOauth(
     val clientId: String,
     val clientSecret: String,
     val allowedUserEmails: Collection<String>,
+    val tokenHashKeyBase64: String,
 ) : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
@@ -44,6 +47,7 @@ data class GoogleOauth(
                     tokenServerUrl = tokenServerUrl,
                     clientId = clientId,
                     clientSecret = clientSecret,
+                    tokenHashKey = tokenHashKeyBase64.base64DecodedArray(),
                 )
             routes(
                 GoogleOAuthCallback(oauth, userRepository, allowedUserEmails = allowedUserEmails),
@@ -57,8 +61,10 @@ data class GoogleOauth(
 val HOST = Header.required("host")
 
 private const val ID_TOKEN_COOKIE_NAME = "id_token"
-
 private val idTokenCookie = Cookies.optional(name = ID_TOKEN_COOKIE_NAME)
+
+private const val AUTH_CSRF_TOKEN_COOKIE_NAME = "auth_csrf_token"
+private val authCsrfTokenCookie = Cookies.optional(name = AUTH_CSRF_TOKEN_COOKIE_NAME)
 
 private class AuthenticateViaGoogle(
     private val oauth: OAuth,
@@ -71,15 +77,33 @@ private class AuthenticateViaGoogle(
                 idTokenCookie(request)?.let { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
             if (idToken != null) {
                 val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
-                if (user == null) Response(Status.FORBIDDEN) else next(user(user, request))
+                if (user == null) throw ForbiddenException() else next(user(user, request))
             } else {
-                val authUrl = oauth.authFlow.newAuthorizationUrl().setRedirectUri(oauth.redirectUri(request)).build()
+                val csrfToken = randomBytes(numBytes = 32)
+                val tokenHash = oauth.hashToken(token = csrfToken)
+                val authUrl =
+                    oauth.authFlow.newAuthorizationUrl()
+                        .setRedirectUri(oauth.redirectUri(request))
+                        .setState(tokenHash.base64Encode())
+                        .build()
                 Response(Status.FOUND).header("location", authUrl)
+                    .cookie(
+                        Cookie(
+                            name = AUTH_CSRF_TOKEN_COOKIE_NAME,
+                            value = csrfToken.base64Encode(),
+                            path = "/",
+                            secure = true,
+                            httpOnly = true,
+                            sameSite = SameSite.Lax,
+                            maxAge = 300,
+                        ),
+                    )
             }
         }
 }
 
-private val codeQuery = Query.required("code")
+private val codeQuery = Query.optional("code")
+private val stateQuery = Query.optional("state")
 
 private const val CALLBACK_PATH = "/oauth/code"
 
@@ -88,27 +112,35 @@ private class GoogleOAuthCallback(
     private val userRepository: UserRepository,
     private val allowedUserEmails: Collection<String>,
 ) : RoutingHttpHandler by CALLBACK_PATH bind GET to { request ->
-        val authCode = codeQuery(request)
+        val state = stateQuery(request).decodeBase64()
+        val csrfToken = authCsrfTokenCookie(request)?.value.decodeBase64()
+        val expectedHash = oauth.hashToken(token = csrfToken)
+        if (!state.contentEquals(expectedHash)) throw ForbiddenException()
+        val authCode = codeQuery(request) ?: throw ForbiddenException()
         val tokenResponse =
             oauth.authFlow.newTokenRequest(authCode).setRedirectUri(oauth.redirectUri(request)).execute()
         val idToken = tokenResponse.parseIdToken()
-        if (!allowedUserEmails.contains(idToken.payload.email)) {
-            Response(Status.FORBIDDEN)
-        } else {
-            userRepository
-                .createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
-            Response(Status.FOUND).header("location", "/")
-                .cookie(
-                    Cookie(
-                        name = ID_TOKEN_COOKIE_NAME,
-                        value = tokenResponse.idToken,
-                        path = "/",
-                        secure = true,
-                        httpOnly = true,
-                        sameSite = SameSite.Strict,
-                    ),
-                )
-        }
+        if (!allowedUserEmails.contains(idToken.payload.email)) throw ForbiddenException()
+        userRepository.createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
+        Response(Status.FOUND).header("location", "/")
+            .cookie(
+                Cookie(
+                    name = ID_TOKEN_COOKIE_NAME,
+                    value = tokenResponse.idToken,
+                    path = "/",
+                    secure = true,
+                    httpOnly = true,
+                    sameSite = SameSite.Strict,
+                ),
+            )
+            .invalidateCookie(name = AUTH_CSRF_TOKEN_COOKIE_NAME)
+    }
+
+private fun String?.decodeBase64(): ByteArray =
+    try {
+        this?.base64DecodedArray() ?: throw ForbiddenException()
+    } catch (e: IllegalArgumentException) {
+        throw ForbiddenException()
     }
 
 private val logoutHandler: HttpHandler = {
@@ -121,6 +153,7 @@ private class OAuth(
     tokenServerUrl: URI?,
     clientId: String,
     clientSecret: String,
+    private val tokenHashKey: ByteArray,
 ) {
     val authFlow: GoogleAuthorizationCodeFlow =
         GoogleAuthorizationCodeFlow
@@ -144,4 +177,6 @@ private class OAuth(
         (redirectUri ?: URI("http://${HOST(request)}").redirectUri()).toASCIIString()
 
     fun URI.redirectUri(): URI = resolve(CALLBACK_PATH)
+
+    fun hashToken(token: ByteArray): ByteArray = hmacSha256(data = token, key = tokenHashKey)
 }
