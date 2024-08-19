@@ -444,7 +444,7 @@ class EndToEndTests {
             page.assertCurrentMonthIs(today.toYearMonth().plusMonths(1))
 
             // No more requests made to the auth server after the token is exchanged.
-            assertEquals(0, authServer.serveEvents.requests.size)
+            assertEquals(0, authServer.allNonCertRequests().size)
         }
     }
 

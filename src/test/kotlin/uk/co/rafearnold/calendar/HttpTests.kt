@@ -1,5 +1,7 @@
 package uk.co.rafearnold.calendar
 
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import org.http4k.base64DecodedArray
 import org.http4k.base64Encode
 import org.http4k.core.Uri
@@ -8,6 +10,7 @@ import org.http4k.core.cookie.SameSite
 import org.http4k.core.queries
 import org.http4k.core.toParametersMap
 import org.http4k.server.Http4kServer
+import org.jooq.impl.DSL
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -20,6 +23,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
+import java.security.interfaces.RSAPrivateKey
 import java.sql.Statement
 import java.time.Clock
 import java.time.Instant
@@ -82,11 +86,11 @@ class HttpTests {
 
     @ParameterizedTest
     @ValueSource(strings = ["/", "/day/2024-08-08", "/days"])
-    fun `user is redirected to login on entry`() {
+    fun `user is redirected to login on entry`(url: String) {
         val clientId = UUID.randomUUID().toString()
         server = startServer(auth = googleOauth(clientId = clientId))
 
-        val response = httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
+        val response = httpClient.send(HttpRequest.newBuilder(server.uri(url)).GET().build(), BodyHandlers.discarding())
         assertEquals(302, response.statusCode())
         val location = response.headers().firstValue("location").map { Uri.of(it) }.getOrNull()
         assertNotNull(location)
@@ -340,6 +344,103 @@ class HttpTests {
         }
     }
 
+    @Test
+    fun `invalid id tokens are rejected`() {
+        val clientId = UUID.randomUUID().toString()
+        GoogleOAuthServer(clientId = clientId).use { authServer ->
+            val userEmail = "test@example.com"
+            val userGoogleSubjectId = UUID.randomUUID().toString()
+            val otherUserEmail = "other@example.com"
+            val otherUserGoogleSubjectId = UUID.randomUUID().toString()
+            server = startServer(auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail)))
+
+            // Make sure the users already exists in the db.
+            DSL.using(dbUrl).use {
+                val userRepo = UserRepository(it)
+                userRepo.createUserIfNoneExists(email = userEmail, googleSubjectId = userGoogleSubjectId)
+                userRepo.createUserIfNoneExists(email = otherUserEmail, googleSubjectId = otherUserGoogleSubjectId)
+            }
+
+            fun sendRequest(idToken: String): HttpResponse<String> {
+                val request =
+                    HttpRequest.newBuilder(server.uri("/"))
+                        .header("cookie", Cookie("id_token", idToken).keyValueCookieString())
+                        .build()
+                return httpClient.send(request, BodyHandlers.ofString())
+            }
+
+            fun assertRequestReturnsRedirect(idToken: String) {
+                val response = sendRequest(idToken)
+                assertEquals(302, response.statusCode())
+                val location = response.headers().firstValue("location").getOrNull()
+                assertNotNull(location)
+                assertTrue(location.startsWith(authServer.authenticationPageUrl))
+            }
+
+            fun assertRequestIsForbidden(idToken: String) {
+                val response = sendRequest(idToken)
+                assertEquals(403, response.statusCode())
+                assertEquals("", response.body())
+            }
+
+            fun assertRequestSucceeds(idToken: String) {
+                val response = sendRequest(idToken)
+                assertEquals(200, response.statusCode())
+            }
+
+            fun idToken(
+                issuedAt: Instant = Instant.now(),
+                expiresAt: Instant = Instant.now().plusSeconds(3920),
+                issuer: String = listOf("accounts.google.com", "https://accounts.google.com").shuffled()[0],
+                audience: String = clientId,
+                subject: String = userGoogleSubjectId,
+                email: String = userEmail,
+                signingKey: RSAPrivateKey = authServer.certPrivateKey,
+            ): String =
+                JWT.create()
+                    .withIssuedAt(issuedAt)
+                    .withExpiresAt(expiresAt)
+                    .withIssuer(issuer)
+                    .withAudience(audience)
+                    .withSubject(subject)
+                    .withClaim("email", email)
+                    .sign(Algorithm.RSA256(signingKey))
+
+            // Empty ID token.
+            assertRequestIsForbidden(idToken = "")
+            // Invalid base64.
+            assertRequestIsForbidden(idToken = "not base64")
+            // Invalid JSON.
+            assertRequestIsForbidden(
+                idToken = "not json".base64Encode() + "." + "not json".base64Encode() + "." + "whatever".base64Encode(),
+            )
+            // Invalid JWT format.
+            assertRequestIsForbidden(
+                idToken = "{}".base64Encode() + "." + "{}".base64Encode() + "." + "whatever".base64Encode(),
+            )
+            // Invalid signature.
+            assertRequestReturnsRedirect(idToken = idToken().replaceAfterLast('.', "invalid signature".base64Encode()))
+            // Signed with incorrect key.
+            assertRequestReturnsRedirect(idToken = idToken(signingKey = generateRsaKeyPair().private))
+            // Expired ID token.
+            assertRequestReturnsRedirect(idToken = idToken(expiresAt = Instant.now().minusSeconds(300)))
+            // Future issued-at time.
+            assertRequestReturnsRedirect(idToken = idToken(issuedAt = Instant.now().plusSeconds(301)))
+            // Incorrect issuer.
+            assertRequestReturnsRedirect(idToken = idToken(issuer = "https://not.google.com"))
+            // Incorrect audience.
+            assertRequestReturnsRedirect(idToken = idToken(audience = UUID.randomUUID().toString()))
+            // Unrecognised subject.
+            assertRequestIsForbidden(idToken = idToken(subject = UUID.randomUUID().toString()))
+            // Unrecognised email.
+            assertRequestIsForbidden(idToken = idToken(email = "whoami@example.com"))
+            // Disallowed email.
+            assertRequestIsForbidden(idToken = idToken(subject = otherUserGoogleSubjectId, email = otherUserEmail))
+            // Valid ID token.
+            assertRequestSucceeds(idToken = idToken())
+        }
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -415,6 +516,7 @@ class HttpTests {
         serverBaseUrl = null,
         authServerUrl = null,
         tokenServerUrl = tokenServerUrl,
+        publicCertsUrl = null,
         clientId = clientId,
         clientSecret = clientSecret,
         allowedUserEmails = allowedUserEmails,

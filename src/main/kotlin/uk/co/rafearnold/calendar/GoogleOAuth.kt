@@ -2,6 +2,8 @@ package uk.co.rafearnold.calendar
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier
+import com.google.api.client.googleapis.auth.oauth2.GooglePublicKeysManager
 import com.google.api.client.http.GenericUrl
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
@@ -25,11 +27,13 @@ import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
 import org.http4k.routing.routes
 import java.net.URI
+import java.time.Clock
 
 data class GoogleOauth(
     val serverBaseUrl: URI?,
     val authServerUrl: URI?,
     val tokenServerUrl: URI?,
+    val publicCertsUrl: URI?,
     val clientId: String,
     val clientSecret: String,
     val allowedUserEmails: Collection<String>,
@@ -38,6 +42,7 @@ data class GoogleOauth(
     override fun createHandlerFactory(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
+        clock: Clock,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list ->
             val oauth =
@@ -45,12 +50,15 @@ data class GoogleOauth(
                     serverBaseUrl = serverBaseUrl,
                     authServerUrl = authServerUrl,
                     tokenServerUrl = tokenServerUrl,
+                    publicCertsUrl = publicCertsUrl,
                     clientId = clientId,
                     clientSecret = clientSecret,
                     tokenHashKey = tokenHashKeyBase64.base64DecodedArray(),
+                    clock = clock,
+                    allowedUserEmails = allowedUserEmails,
                 )
             routes(
-                GoogleOAuthCallback(oauth, userRepository, allowedUserEmails = allowedUserEmails),
+                GoogleOAuthCallback(oauth, userRepository),
                 routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
             )
         }
@@ -74,10 +82,20 @@ private class AuthenticateViaGoogle(
     override fun invoke(next: HttpHandler): HttpHandler =
         { request ->
             val idToken =
-                idTokenCookie(request)?.let { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
-            if (idToken != null) {
+                idTokenCookie(request)?.let {
+                    runCatching { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
+                        .getOrElse { throw ForbiddenException() }
+                }
+            if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
                 val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
-                if (user == null) throw ForbiddenException() else next(user(user, request))
+                if (user != null &&
+                    idToken.payload.email == user.email &&
+                    oauth.emailIsAllowed(email = idToken.payload.email)
+                ) {
+                    next(user(user, request))
+                } else {
+                    throw ForbiddenException()
+                }
             } else {
                 val csrfToken = randomBytes(numBytes = 32)
                 val tokenHash = oauth.hashToken(token = csrfToken)
@@ -110,7 +128,6 @@ private const val CALLBACK_PATH = "/oauth/code"
 private class GoogleOAuthCallback(
     private val oauth: OAuth,
     private val userRepository: UserRepository,
-    private val allowedUserEmails: Collection<String>,
 ) : RoutingHttpHandler by CALLBACK_PATH bind GET to { request ->
         val state = stateQuery(request).decodeBase64()
         val csrfToken = authCsrfTokenCookie(request)?.value.decodeBase64()
@@ -120,7 +137,7 @@ private class GoogleOAuthCallback(
         val tokenResponse =
             oauth.authFlow.newTokenRequest(authCode).setRedirectUri(oauth.redirectUri(request)).execute()
         val idToken = tokenResponse.parseIdToken()
-        if (!allowedUserEmails.contains(idToken.payload.email)) throw ForbiddenException()
+        if (!oauth.emailIsAllowed(email = idToken.payload.email)) throw ForbiddenException()
         userRepository.createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
         Response(Status.FOUND).header("location", "/")
             .cookie(
@@ -151,24 +168,47 @@ private class OAuth(
     serverBaseUrl: URI?,
     authServerUrl: URI?,
     tokenServerUrl: URI?,
+    publicCertsUrl: URI?,
     clientId: String,
     clientSecret: String,
     private val tokenHashKey: ByteArray,
+    private val clock: Clock,
+    private val allowedUserEmails: Collection<String>,
 ) {
-    val authFlow: GoogleAuthorizationCodeFlow =
-        GoogleAuthorizationCodeFlow
-            .Builder(
-                NetHttpTransport(),
-                GsonFactory.getDefaultInstance(),
-                clientId,
-                clientSecret,
-                listOf("openid profile email"),
+    val authFlow: GoogleAuthorizationCodeFlow
+    val tokenVerifier: GoogleIdTokenVerifier
+
+    init {
+        val httpTransport = NetHttpTransport()
+
+        authFlow =
+            GoogleAuthorizationCodeFlow
+                .Builder(
+                    httpTransport,
+                    GsonFactory.getDefaultInstance(),
+                    clientId,
+                    clientSecret,
+                    listOf("openid profile email"),
+                )
+                .run { if (tokenServerUrl != null) setTokenServerUrl(GenericUrl(tokenServerUrl)) else this }
+                .run {
+                    if (authServerUrl != null) setAuthorizationServerEncodedUrl(authServerUrl.toASCIIString()) else this
+                }
+                .build()
+
+        tokenVerifier =
+            GoogleIdTokenVerifier.Builder(
+                GooglePublicKeysManager.Builder(httpTransport, GsonFactory.getDefaultInstance())
+                    .setClock { clock.millis() }
+                    .run {
+                        if (publicCertsUrl != null) setPublicCertsEncodedUrl(publicCertsUrl.toASCIIString()) else this
+                    }
+                    .build(),
             )
-            .run { if (tokenServerUrl != null) setTokenServerUrl(GenericUrl(tokenServerUrl)) else this }
-            .run {
-                if (authServerUrl != null) setAuthorizationServerEncodedUrl(authServerUrl.toASCIIString()) else this
-            }
-            .build()
+                .setClock { clock.millis() }
+                .setAudience(listOf(clientId))
+                .build()
+    }
 
     private val redirectUri: URI? = serverBaseUrl?.redirectUri()
 
@@ -179,4 +219,6 @@ private class OAuth(
     fun URI.redirectUri(): URI = resolve(CALLBACK_PATH)
 
     fun hashToken(token: ByteArray): ByteArray = hmacSha256(data = token, key = tokenHashKey)
+
+    fun emailIsAllowed(email: String) = allowedUserEmails.contains(email)
 }

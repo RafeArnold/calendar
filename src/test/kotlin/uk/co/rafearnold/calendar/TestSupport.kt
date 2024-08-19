@@ -5,17 +5,27 @@ import com.auth0.jwt.algorithms.Algorithm
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import com.github.tomakehurst.wiremock.client.WireMock
+import com.github.tomakehurst.wiremock.matching.UrlPattern
 import com.github.tomakehurst.wiremock.verification.LoggedRequest
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
+import org.bouncycastle.cert.X509v3CertificateBuilder
+import org.bouncycastle.openssl.MiscPEMGenerator
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.bouncycastle.util.io.pem.PemWriter
 import org.http4k.base64Encode
 import org.http4k.core.toUrlFormEncoded
 import org.http4k.server.Http4kServer
 import org.intellij.lang.annotations.Language
+import java.io.StringWriter
+import java.math.BigInteger
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.KeyPairGenerator
-import java.security.interfaces.RSAKey
+import java.security.interfaces.RSAPrivateKey
+import java.security.interfaces.RSAPublicKey
 import java.sql.DriverManager
 import java.sql.Statement
 import java.time.Clock
@@ -26,6 +36,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Date
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -80,13 +91,17 @@ class GoogleOAuthServer(
     private val clientId: String = UUID.randomUUID().toString(),
     private val clientSecret: String = UUID.randomUUID().toString(),
 ) : WireMockServer(0), AutoCloseable {
+    private val certKeyPair: RsaKeyPair = generateRsaKeyPair()
+
     init {
         start()
+        stubCerts()
     }
 
     companion object {
         private const val TOKEN_EXCHANGE_PATH = "/token"
         private const val AUTHENTICATION_PAGE_PATH = "/oauth/auth"
+        private const val CERTS_PATH = "/oauth2/v1/certs"
         const val LOGIN_BUTTON_TEST_ID: String = "login-button"
     }
 
@@ -100,6 +115,7 @@ class GoogleOAuthServer(
             serverBaseUrl = null,
             authServerUrl = URI(authenticationPageUrl),
             tokenServerUrl = URI(baseUrl() + TOKEN_EXCHANGE_PATH),
+            publicCertsUrl = URI(baseUrl() + CERTS_PATH),
             clientId = clientId,
             clientSecret = clientSecret,
             allowedUserEmails = allowedUserEmails,
@@ -111,7 +127,6 @@ class GoogleOAuthServer(
         email: String,
         subject: String,
     ) {
-        val key = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().private as RSAKey
         val idToken =
             JWT.create()
                 .withAudience(clientId)
@@ -120,7 +135,7 @@ class GoogleOAuthServer(
                 .withIssuer("https://accounts.google.com")
                 .withSubject(subject)
                 .withClaim("email", email)
-                .sign(Algorithm.RSA256(key))
+                .sign(Algorithm.RSA256(certKeyPair.private))
 
         @Language("JSON")
         val tokenJson = """{
@@ -181,6 +196,34 @@ class GoogleOAuthServer(
         )
     }
 
+    val certPrivateKey: RSAPrivateKey = certKeyPair.private
+
+    private fun stubCerts() {
+        val cert = generateX509Cert(certKeyPair)
+        stubFor(
+            WireMock.get(WireMock.urlEqualTo(CERTS_PATH))
+                .willReturn(ResponseDefinitionBuilder.okForJson(mapOf(UUID.randomUUID().toString() to cert))),
+        )
+    }
+
+    private fun generateX509Cert(keyPair: RsaKeyPair): String {
+        val cert =
+            X509v3CertificateBuilder(
+                X500Name("CN=My Application,O=My Organisation,L=My City,C=DE"),
+                BigInteger.ONE,
+                Date.from(Instant.EPOCH),
+                Date.from(LocalDate.EPOCH.atStartOfDay().plusYears(100).toInstant(ZoneOffset.UTC)),
+                X500Name("CN=My Application,O=My Organisation,L=My City,C=DE"),
+                SubjectPublicKeyInfo.getInstance(keyPair.public.encoded),
+            ).build(JcaContentSignerBuilder("SHA256WithRSA").build(keyPair.private))
+        val stringWriter = StringWriter()
+        PemWriter(stringWriter).use { it.writeObject(MiscPEMGenerator(cert)) }
+        return stringWriter.toString()
+    }
+
+    fun allNonCertRequests(): List<LoggedRequest> =
+        findAll(WireMock.anyRequestedFor(UrlPattern(WireMock.not(WireMock.equalTo(CERTS_PATH)), false)))
+
     override fun close() {
         stop()
     }
@@ -195,3 +238,9 @@ fun hmacSha256(
     tokenKey: ByteArray,
     tokenBytes: ByteArray,
 ): ByteArray = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(tokenKey, "HmacSHA256")) }.doFinal(tokenBytes)
+
+fun generateRsaKeyPair(): RsaKeyPair =
+    KeyPairGenerator.getInstance("RSA").generateKeyPair()
+        .let { RsaKeyPair(public = it.public as RSAPublicKey, private = it.private as RSAPrivateKey) }
+
+data class RsaKeyPair(val public: RSAPublicKey, val private: RSAPrivateKey)

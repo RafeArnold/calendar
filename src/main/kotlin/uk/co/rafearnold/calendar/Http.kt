@@ -60,6 +60,7 @@ interface AuthConfig {
     fun createHandlerFactory(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
+        clock: Clock,
     ): RoutingHandlerFactory
 
     fun logoutHandler(): HttpHandler
@@ -69,6 +70,7 @@ data object NoAuth : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
+        clock: Clock,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list -> routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } } }
 
@@ -95,7 +97,7 @@ fun Config.startServer(): Http4kServer {
     val router =
         routes(
             Assets(assetsDir = assetsDir),
-            auth.createHandlerFactory(userRepository, userLens)
+            auth.createHandlerFactory(userRepository, userLens, clock)
                 .routes(
                     Index(view, clock, daysRepository, userLens),
                     DaysRoute(view, clock, daysRepository, userLens),
