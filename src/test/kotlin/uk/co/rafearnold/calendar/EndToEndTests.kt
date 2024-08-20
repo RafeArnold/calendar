@@ -571,6 +571,7 @@ class EndToEndTests {
             clock = clock,
             dbUrl = dbUrl,
             assetDirs = assetDirs,
+            hotReloading = false,
             auth = auth,
             messageLoader = messageLoader,
         ).startServer()

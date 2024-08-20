@@ -53,6 +53,7 @@ data class Config(
     val clock: Clock,
     val dbUrl: String,
     val assetDirs: List<String>,
+    val hotReloading: Boolean,
     val auth: AuthConfig,
     val messageLoader: MessageLoader,
 ) {
@@ -91,7 +92,7 @@ fun Config.startServer(): Http4kServer {
     val userRepository = UserRepository(dbCtx)
     val daysRepository = DaysRepository(dbCtx, clock)
 
-    val templateRenderer = PebbleTemplateRenderer()
+    val templateRenderer = PebbleTemplateRenderer(PebbleEngineFactory.create(hotReloading = hotReloading))
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
 
     val requestContexts = RequestContexts()

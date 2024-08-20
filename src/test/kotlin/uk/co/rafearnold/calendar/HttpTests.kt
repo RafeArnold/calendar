@@ -568,7 +568,14 @@ class HttpTests {
         auth: AuthConfig = NoAuth,
         assetDirs: List<String> = emptyList(),
     ): Http4kServer =
-        Config(port = 0, clock = clock, dbUrl = dbUrl, assetDirs = assetDirs, auth = auth) { "whatever" }.startServer()
+        Config(
+            port = 0,
+            clock = clock,
+            dbUrl = dbUrl,
+            assetDirs = assetDirs,
+            hotReloading = false,
+            auth = auth,
+        ) { "whatever" }.startServer()
 
     private fun googleOauth(
         tokenServerUrl: URI? = null,

@@ -2,6 +2,7 @@ package uk.co.rafearnold.calendar
 
 import io.pebbletemplates.pebble.PebbleEngine
 import io.pebbletemplates.pebble.error.LoaderException
+import io.pebbletemplates.pebble.loader.ClasspathLoader
 import io.pebbletemplates.pebble.loader.FileLoader
 import org.http4k.template.TemplateRenderer
 import org.http4k.template.ViewModel
@@ -90,5 +91,15 @@ class PebbleTemplateRenderer(
             writer.toString()
         } catch (e: LoaderException) {
             throw RuntimeException("Template ${viewModel.template()} not found", e)
+        }
+}
+
+object PebbleEngineFactory {
+    fun create(hotReloading: Boolean): PebbleEngine =
+        if (hotReloading) {
+            PebbleEngine.Builder().cacheActive(false)
+                .loader(FileLoader().apply { prefix = "src/main/resources" }).build()
+        } else {
+            PebbleEngine.Builder().cacheActive(true).loader(ClasspathLoader()).build()
         }
 }

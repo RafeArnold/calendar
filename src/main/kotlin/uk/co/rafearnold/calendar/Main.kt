@@ -18,6 +18,7 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config =
         clock = Clock.systemUTC(),
         dbUrl = env.getValue("DB_URL"),
         assetDirs = env.getValue("ASSET_DIRS").split(','),
+        hotReloading = env["HOT_RELOADING"] == "true",
         auth = GoogleOauth.fromEnv(env),
     ) { "something sweet" }
 
