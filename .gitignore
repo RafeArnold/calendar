@@ -4,3 +4,4 @@
 /node_modules
 /src/main/resources/assets/index.min.css
 calendar.db
+.env

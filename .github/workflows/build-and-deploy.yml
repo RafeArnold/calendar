@@ -1,0 +1,59 @@
+name: Build and deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    runs-on: ubuntu-latest
+    needs:
+      - test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v3
+      - run: ./gradlew shadowJar
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: calendar:latest
+          context: .
+          outputs: type=docker,dest=/tmp/calendar.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-image
+          path: /tmp/calendar.tar
+          retention-days: 1
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-image
+          path: distfiles
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          source: distfiles/*
+          target: ~/projects/calendar/
+          strip_components: 1
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          script: |
+            cd ~/projects/calendar
+            ./deploy-tar.sh
