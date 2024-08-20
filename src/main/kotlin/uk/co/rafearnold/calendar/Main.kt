@@ -12,6 +12,15 @@ fun main() {
         clock = Clock.systemUTC(),
         dbUrl = "jdbc:sqlite:calendar.db",
         assetsDir = "src/main/resources/assets",
+        auth = NoAuth,
+//            GoogleOauth(
+//                serverBaseUrl = URI("http://localhost:8080"),
+//                authServerUrl = null,
+//                tokenServerUrl = null,
+//                clientId = "",
+//                clientSecret = "",
+//                allowedUserEmails = emptyList(), // TODO
+//            ),
     ) { "something sweet" }
         .startServer().block()
 }

@@ -12,10 +12,9 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 fun YearMonth.toCalendarModel(
-    daysRepo: DaysRepository,
+    openedDays: List<Int>,
     clock: Clock,
 ): CalendarBaseModel {
-    val openedDays = daysRepo.getOpenedDaysOfMonth(this)
     val days = (1..lengthOfMonth()).map { atDay(it).toDayModel(opened = openedDays.contains(it), now = clock.toDate()) }
     return object : CalendarBaseModel {
         override val days: List<DayModel> = days

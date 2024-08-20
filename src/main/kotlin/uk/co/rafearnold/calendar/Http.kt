@@ -4,17 +4,25 @@ import org.flywaydb.core.Flyway
 import org.http4k.core.Body
 import org.http4k.core.ContentType
 import org.http4k.core.Filter
+import org.http4k.core.HttpHandler
 import org.http4k.core.Method.GET
+import org.http4k.core.RequestContext
+import org.http4k.core.RequestContexts
 import org.http4k.core.Response
 import org.http4k.core.Status
 import org.http4k.core.Status.Companion.FORBIDDEN
+import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
+import org.http4k.core.Store
 import org.http4k.core.then
 import org.http4k.core.with
+import org.http4k.filter.ServerFilters
 import org.http4k.lens.BiDiBodyLens
 import org.http4k.lens.Path
 import org.http4k.lens.Query
+import org.http4k.lens.RequestContextKey
+import org.http4k.lens.RequestContextLens
 import org.http4k.lens.StringBiDiMappings
 import org.http4k.lens.localDate
 import org.http4k.lens.map
@@ -44,22 +52,60 @@ data class Config(
     val clock: Clock,
     val dbUrl: String,
     val assetsDir: String,
+    val auth: AuthConfig,
     val messageLoader: MessageLoader,
 )
+
+interface AuthConfig {
+    fun createHandlerFactory(
+        userRepository: UserRepository,
+        userLens: RequestContextLens<User>,
+        clock: Clock,
+    ): RoutingHandlerFactory
+
+    fun logoutHandler(): HttpHandler
+}
+
+data object NoAuth : AuthConfig {
+    override fun createHandlerFactory(
+        userRepository: UserRepository,
+        userLens: RequestContextLens<User>,
+        clock: Clock,
+    ): RoutingHandlerFactory =
+        RoutingHandlerFactory { list -> routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } } }
+
+    override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
+}
+
+fun interface RoutingHandlerFactory {
+    fun routes(vararg list: RoutingHttpHandler): RoutingHttpHandler
+}
 
 fun Config.startServer(): Http4kServer {
     val dataSource = SQLiteDataSource().apply { url = dbUrl }
     migrateDb(dataSource)
-    val daysRepository = DaysRepository(DSL.using(dataSource, SQLDialect.SQLITE), clock)
+    val dbCtx = DSL.using(dataSource, SQLDialect.SQLITE)
+    val userRepository = UserRepository(dbCtx)
+    val daysRepository = DaysRepository(dbCtx, clock)
+
     val templateRenderer = PebbleTemplateRenderer()
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
+
+    val requestContexts = RequestContexts()
+    val userLens = userLens(requestContexts)
+
     val router =
         routes(
             Assets(assetsDir = assetsDir),
-            Index(view, clock, daysRepository),
-            DaysRoute(view, clock, daysRepository),
-            DayRoute(view, messageLoader, clock, daysRepository),
-        )
+            auth.createHandlerFactory(userRepository, userLens, clock)
+                .routes(
+                    Index(view, clock, daysRepository, userLens),
+                    DaysRoute(view, clock, daysRepository, userLens),
+                    DayRoute(view, messageLoader, clock, daysRepository, userLens),
+                )
+                .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
+            logoutRoute(auth),
+        ).withFilter(forbiddenFilter)
     val app =
         Filter { next ->
             {
@@ -89,6 +135,9 @@ class Assets(
     assetsDir: String,
 ) : RoutingHttpHandler by static(ResourceLoader.Directory(assetsDir)).withBasePath("/assets")
 
+private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
+    RequestContextKey.required(contexts, name = "user")
+
 val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
 
 val monthQuery = Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")
@@ -97,6 +146,7 @@ class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     daysRepo: DaysRepository,
+    user: RequestContextLens<User>,
 ) : RoutingHttpHandler by "/" bind GET to {
         val date = monthQuery(it) ?: clock.now().toLocalDate().toYearMonth()
         val viewModel =
@@ -107,7 +157,7 @@ class Index(
                 month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = date.year,
                 monthImageLink = monthImageLink(date),
-                calendarBaseModel = date.toCalendarModel(daysRepo, clock),
+                calendarBaseModel = date.toCalendarModel(daysRepo.getOpenedDaysOfMonth(user(it), date), clock),
             )
         Response(OK).with(view of viewModel)
     }
@@ -116,9 +166,11 @@ class DaysRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     daysRepo: DaysRepository,
+    user: RequestContextLens<User>,
 ) : RoutingHttpHandler by "/days" bind GET to { request ->
         val date = monthQuery(request) ?: clock.now().toLocalDate().toYearMonth()
-        Response(OK).with(view of DaysViewModel(date.toCalendarModel(daysRepo, clock)))
+        val openedDays = daysRepo.getOpenedDaysOfMonth(user(request), date)
+        Response(OK).with(view of DaysViewModel(date.toCalendarModel(openedDays, clock)))
     }
 
 class DayRoute(
@@ -126,27 +178,27 @@ class DayRoute(
     messageLoader: MessageLoader,
     clock: Clock,
     daysRepo: DaysRepository,
+    user: RequestContextLens<User>,
 ) : RoutingHttpHandler by "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
-        if (date.isAfter(clock.now().toLocalDate())) {
-            Response(FORBIDDEN)
+        if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
+        daysRepo.markDayAsOpened(user(it), date)
+        val message = messageLoader[date]
+        if (message != null) {
+            val month = date.toYearMonth()
+            val viewModel =
+                DayViewModel(
+                    text = message,
+                    backLink = daysLink(month),
+                    dayOfMonth = date.dayOfMonth,
+                )
+            Response(OK).with(view of viewModel)
         } else {
-            daysRepo.markDayAsOpened(date)
-            val message = messageLoader[date]
-            if (message != null) {
-                val month = date.toYearMonth()
-                val viewModel =
-                    DayViewModel(
-                        text = message,
-                        backLink = daysLink(month),
-                        dayOfMonth = date.dayOfMonth,
-                    )
-                Response(OK).with(view of viewModel)
-            } else {
-                Response(NOT_FOUND)
-            }
+            Response(NOT_FOUND)
         }
     }
+
+fun logoutRoute(auth: AuthConfig): RoutingHttpHandler = "/logout" bind GET to auth.logoutHandler()
 
 fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
 
@@ -159,3 +211,16 @@ private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(mon
 private fun daysLink(month: YearMonth) = "/days?month=" + monthFormatter.format(month)
 
 private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
+
+val forbiddenFilter: Filter =
+    Filter { next ->
+        {
+            try {
+                next(it)
+            } catch (e: ForbiddenException) {
+                Response(FORBIDDEN)
+            }
+        }
+    }
+
+class ForbiddenException : RuntimeException()
