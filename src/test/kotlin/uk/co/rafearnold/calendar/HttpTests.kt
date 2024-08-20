@@ -4,14 +4,13 @@ import org.http4k.server.Http4kServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
+import java.time.Clock
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import kotlin.test.assertEquals
 
 class HttpTests {
@@ -34,7 +33,7 @@ class HttpTests {
     fun `only allows retrieval of days in the past`() {
         var today = LocalDate.of(2024, 7, 15)
         val clock = today.toMutableClock()
-        server = startServer(port = 0, clock = clock, dbUrl = dbUrl) { "whatever" }
+        server = startServer(clock = clock)
 
         assertEquals(200, getDay(today).statusCode())
         assertEquals(200, getDay(today.minusDays(1)).statusCode())
@@ -65,8 +64,12 @@ class HttpTests {
 
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
+
+    private fun startServer(clock: Clock): Http4kServer =
+        Config(
+            port = 0,
+            clock = clock,
+            dbUrl = dbUrl,
+            assetsDir = "src/main/resources/assets",
+        ) { "whatever" }.startServer()
 }
-
-private fun Http4kServer.dayUri(day: LocalDate): URI = uri("/day/${day.format(DateTimeFormatter.ISO_LOCAL_DATE)}")
-
-private fun Http4kServer.uri(path: String): URI = URI.create("http://localhost:${port()}").resolve(path)

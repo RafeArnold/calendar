@@ -43,22 +43,26 @@ class HomeViewModel(
     val todayLink: String,
     val month: String,
     val year: Int,
+    val monthImageLink: String,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
-    private val rotated: Boolean = false
-
     override fun template(): String = "home"
+}
+
+@Suppress("unused")
+class DaysViewModel(
+    calendarBaseModel: CalendarBaseModel,
+) : ViewModel, CalendarBaseModel by calendarBaseModel {
+    override fun template(): String = "days"
 }
 
 @Suppress("unused")
 class DayViewModel(
     val text: String,
     val backLink: String,
-    calendarBaseModel: CalendarBaseModel,
-) : ViewModel, CalendarBaseModel by calendarBaseModel {
-    val rotated: Boolean = true
-
-    override fun template(): String = "calendar"
+    val dayOfMonth: Int,
+) : ViewModel {
+    override fun template(): String = "day"
 }
 
 interface CalendarBaseModel {

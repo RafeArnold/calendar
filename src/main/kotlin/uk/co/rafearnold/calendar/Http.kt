@@ -39,19 +39,27 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-fun startServer(
-    port: Int = 8080,
-    clock: Clock = Clock.systemUTC(),
-    dbUrl: String,
-    messageLoader: MessageLoader,
-): Http4kServer {
+data class Config(
+    val port: Int,
+    val clock: Clock,
+    val dbUrl: String,
+    val assetsDir: String,
+    val messageLoader: MessageLoader,
+)
+
+fun Config.startServer(): Http4kServer {
     val dataSource = SQLiteDataSource().apply { url = dbUrl }
     migrateDb(dataSource)
     val daysRepository = DaysRepository(DSL.using(dataSource, SQLDialect.SQLITE), clock)
     val templateRenderer = PebbleTemplateRenderer()
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
     val router =
-        routes(Assets(), Index(view, clock, daysRepository), DayRoute(view, messageLoader, clock, daysRepository))
+        routes(
+            Assets(assetsDir = assetsDir),
+            Index(view, clock, daysRepository),
+            DaysRoute(view, clock, daysRepository),
+            DayRoute(view, messageLoader, clock, daysRepository),
+        )
     val app =
         Filter { next ->
             {
@@ -78,29 +86,39 @@ fun interface MessageLoader {
 }
 
 class Assets(
-    loader: ResourceLoader = ResourceLoader.Directory("src/main/resources/assets"),
-) : RoutingHttpHandler by static(loader).withBasePath("/assets")
+    assetsDir: String,
+) : RoutingHttpHandler by static(ResourceLoader.Directory(assetsDir)).withBasePath("/assets")
 
 val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
+
+val monthQuery = Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")
 
 class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     daysRepo: DaysRepository,
 ) : RoutingHttpHandler by "/" bind GET to {
-        val date =
-            Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")(it)
-                ?: clock.instant().atZone(clock.zone).toLocalDate().toYearMonth()
+        val date = monthQuery(it) ?: clock.now().toLocalDate().toYearMonth()
         val viewModel =
             HomeViewModel(
                 previousMonthLink = monthLink(date.minusMonths(1)),
                 nextMonthLink = monthLink(date.plusMonths(1)),
-                todayLink = monthLink(clock.toDate().toYearMonth()),
+                todayLink = "/",
                 month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = date.year,
+                monthImageLink = monthImageLink(date),
                 calendarBaseModel = date.toCalendarModel(daysRepo, clock),
             )
         Response(OK).with(view of viewModel)
+    }
+
+class DaysRoute(
+    view: BiDiBodyLens<ViewModel>,
+    clock: Clock,
+    daysRepo: DaysRepository,
+) : RoutingHttpHandler by "/days" bind GET to { request ->
+        val date = monthQuery(request) ?: clock.now().toLocalDate().toYearMonth()
+        Response(OK).with(view of DaysViewModel(date.toCalendarModel(daysRepo, clock)))
     }
 
 class DayRoute(
@@ -120,8 +138,8 @@ class DayRoute(
                 val viewModel =
                     DayViewModel(
                         text = message,
-                        backLink = monthLink(month),
-                        calendarBaseModel = date.toCalendarModel(daysRepo, clock),
+                        backLink = daysLink(month),
+                        dayOfMonth = date.dayOfMonth,
                     )
                 Response(OK).with(view of viewModel)
             } else {
@@ -130,11 +148,6 @@ class DayRoute(
         }
     }
 
-fun LocalDate.toCalendarModel(
-    daysRepo: DaysRepository,
-    clock: Clock,
-): CalendarBaseModel = toYearMonth().toCalendarModel(daysRepo, clock)
-
 fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
 
 fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
@@ -142,3 +155,7 @@ fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
 fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
+
+private fun daysLink(month: YearMonth) = "/days?month=" + monthFormatter.format(month)
+
+private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
