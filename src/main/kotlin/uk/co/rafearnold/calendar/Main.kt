@@ -17,7 +17,8 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config =
         port = env["PORT"]?.toInt() ?: 8080,
         clock = Clock.systemUTC(),
         dbUrl = env.getValue("DB_URL"),
-        assetsDir = env.getValue("ASSETS_DIR"),
+        assetDirs = env.getValue("ASSET_DIRS").split(','),
+        hotReloading = env["HOT_RELOADING"] == "true",
         auth = GoogleOauth.fromEnv(env),
     ) { "something sweet" }
 

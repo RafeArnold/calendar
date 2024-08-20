@@ -25,7 +25,8 @@ application.mainClass = "uk.co.rafearnold.calendar.MainKt"
 
 tasks.run<JavaExec> {
     environment("DB_URL", "jdbc:sqlite:calendar.db")
-    environment("ASSETS_DIR", "src/main/resources/assets")
+    environment("ASSET_DIRS", "src/main/resources/assets")
+    environment("HOT_RELOADING", "true")
     File(".env").readLines().forEach { line ->
         val (key, value) = line.split('=')
         environment(key, value)

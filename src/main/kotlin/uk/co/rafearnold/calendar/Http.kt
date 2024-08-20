@@ -39,6 +39,7 @@ import org.http4k.template.viewModel
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import org.sqlite.SQLiteDataSource
+import java.net.URL
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -51,7 +52,8 @@ data class Config(
     val port: Int,
     val clock: Clock,
     val dbUrl: String,
-    val assetsDir: String,
+    val assetDirs: List<String>,
+    val hotReloading: Boolean,
     val auth: AuthConfig,
     val messageLoader: MessageLoader,
 ) {
@@ -90,7 +92,7 @@ fun Config.startServer(): Http4kServer {
     val userRepository = UserRepository(dbCtx)
     val daysRepository = DaysRepository(dbCtx, clock)
 
-    val templateRenderer = PebbleTemplateRenderer()
+    val templateRenderer = PebbleTemplateRenderer(PebbleEngineFactory.create(hotReloading = hotReloading))
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
 
     val requestContexts = RequestContexts()
@@ -98,7 +100,7 @@ fun Config.startServer(): Http4kServer {
 
     val router =
         routes(
-            Assets(assetsDir = assetsDir),
+            Assets(assetDirs = assetDirs),
             auth.createHandlerFactory(userRepository, userLens, clock)
                 .routes(
                     Index(view, clock, daysRepository, userLens),
@@ -134,8 +136,17 @@ fun interface MessageLoader {
 }
 
 class Assets(
-    assetsDir: String,
-) : RoutingHttpHandler by static(ResourceLoader.Directory(assetsDir)).withBasePath("/assets")
+    assetDirs: List<String>,
+) : RoutingHttpHandler by
+    static(ChainResourceLoader(assetDirs.map { ResourceLoader.Directory(it) } + ResourceLoader.Classpath("/assets")))
+        .withBasePath("/assets")
+
+class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceLoader {
+    override fun load(path: String): URL? {
+        for (loader in loaders) loader.load(path)?.let { return it }
+        return null
+    }
+}
 
 private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
     RequestContextKey.required(contexts, name = "user")
