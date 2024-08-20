@@ -40,7 +40,7 @@ dependencies {
 
     implementation("com.google.api-client:google-api-client:2.6.0")
 
-    implementation("ch.qos.logback:logback-classic:1.5.6")
+    implementation("ch.qos.logback:logback-classic:1.5.7")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-params")
