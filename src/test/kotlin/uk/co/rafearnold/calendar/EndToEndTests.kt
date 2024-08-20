@@ -393,7 +393,7 @@ class EndToEndTests {
         copyImage("cat-1.jpg", monthImagesDir.resolve("2024-07.jpg"))
         copyImage("cat-2.jpg", monthImagesDir.resolve("2024-06.jpg"))
         copyImage("cat-3.jpg", monthImagesDir.resolve("2024-08.jpg"))
-        server = startServer(clock = clock, assetsDir = assetsDir.toString()) { "whatever" }
+        server = startServer(clock = clock, assetDirs = listOf(assetsDir.toString())) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -562,7 +562,7 @@ class EndToEndTests {
 
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
-        assetsDir: String = "src/main/resources/assets",
+        assetDirs: List<String> = emptyList(),
         auth: AuthConfig = NoAuth,
         messageLoader: MessageLoader,
     ): Http4kServer =
@@ -570,7 +570,7 @@ class EndToEndTests {
             port = 0,
             clock = clock,
             dbUrl = dbUrl,
-            assetsDir = assetsDir,
+            assetDirs = assetDirs,
             auth = auth,
             messageLoader = messageLoader,
         ).startServer()

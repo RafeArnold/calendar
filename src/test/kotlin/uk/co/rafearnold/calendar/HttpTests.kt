@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.net.URI
@@ -23,14 +24,18 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
+import java.nio.file.Path
 import java.security.interfaces.RSAPrivateKey
 import java.sql.Statement
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.io.path.readBytes
+import kotlin.io.path.writeText
 import kotlin.jvm.optionals.getOrNull
 import kotlin.random.Random
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -474,6 +479,37 @@ class HttpTests {
         }
     }
 
+    @Test
+    fun `assets can be loaded from a hierarchy of directories`(
+        @TempDir assetsDir1: Path,
+        @TempDir assetsDir2: Path,
+    ) {
+        val monthImagesDir1 = assetsDir1.resolve("month-images").apply { Files.createDirectories(this) }
+        val monthImagesDir2 = assetsDir2.resolve("month-images").apply { Files.createDirectories(this) }
+        copyImage("cat-1.jpg", monthImagesDir1.resolve("2024-07.jpg"))
+        copyImage("cat-2.jpg", monthImagesDir2.resolve("2024-07.jpg"))
+        copyImage("cat-3.jpg", monthImagesDir2.resolve("2024-08.jpg"))
+        // Create a file with the same path as one in the classpath to test they can be overridden.
+        assertNotNull(javaClass.getResource("/assets/index.min.css"))
+        val indexCssContent = UUID.randomUUID().toString()
+        assetsDir1.resolve("index.min.css").writeText(indexCssContent)
+        server = startServer(assetDirs = listOf(assetsDir1.toString(), assetsDir2.toString()))
+
+        fun assertAssetIsFrom(
+            path: String,
+            directory: Path,
+        ) {
+            val request = HttpRequest.newBuilder(server.uri("/assets/$path")).GET().build()
+            val response = httpClient.send(request, BodyHandlers.ofByteArray())
+            val expectedBytes = directory.resolve(path).readBytes()
+            assertContentEquals(expectedBytes, response.body())
+        }
+
+        assertAssetIsFrom("month-images/2024-07.jpg", assetsDir1)
+        assertAssetIsFrom("month-images/2024-08.jpg", assetsDir2)
+        assertAssetIsFrom("index.min.css", assetsDir1)
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -530,14 +566,9 @@ class HttpTests {
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
         auth: AuthConfig = NoAuth,
+        assetDirs: List<String> = emptyList(),
     ): Http4kServer =
-        Config(
-            port = 0,
-            clock = clock,
-            dbUrl = dbUrl,
-            assetsDir = "src/main/resources/assets",
-            auth = auth,
-        ) { "whatever" }.startServer()
+        Config(port = 0, clock = clock, dbUrl = dbUrl, assetDirs = assetDirs, auth = auth) { "whatever" }.startServer()
 
     private fun googleOauth(
         tokenServerUrl: URI? = null,
