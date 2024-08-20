@@ -33,6 +33,7 @@ import kotlin.jvm.optionals.getOrNull
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HttpTests {
@@ -106,6 +107,38 @@ class HttpTests {
         )
         assertEquals(listOf(clientId), queryParameters["client_id"])
         assertEquals(listOf("openid profile email"), queryParameters["scope"])
+    }
+
+    @Test
+    fun `authenticated users are given an id token on login`() {
+        GoogleOAuthServer().use { authServer ->
+            val userEmail = "test@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
+            server = startServer(auth = auth)
+
+            val authCode = UUID.randomUUID().toString()
+            val response = login(email = userEmail, authCode = authCode, authServer)
+            assertEquals(302, response.statusCode())
+            assertEquals("", response.body())
+            assertEquals(listOf("/"), response.headers().allValues("location"))
+            authServer.verifyTokenWasExchanged(
+                authCode = authCode,
+                redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
+            )
+            val idTokenCookie =
+                response.headers().allValues("set-cookie")
+                    .map { Cookie.parse(it)!! }
+                    .filter { it.name == "id_token" }
+                    .apply { assertEquals(1, size) }
+                    .first()
+            assertEquals(SameSite.Lax, idTokenCookie.sameSite)
+            assertTrue(idTokenCookie.httpOnly)
+            assertTrue(idTokenCookie.secure)
+            assertNull(idTokenCookie.domain)
+            assertEquals("/", idTokenCookie.path)
+            JWT.require(Algorithm.RSA256(authServer.certKeyPair.public, authServer.certKeyPair.private)).build()
+                .verify(idTokenCookie.value)
+        }
     }
 
     @Test
@@ -395,7 +428,7 @@ class HttpTests {
                 audience: String = clientId,
                 subject: String = userGoogleSubjectId,
                 email: String = userEmail,
-                signingKey: RSAPrivateKey = authServer.certPrivateKey,
+                signingKey: RSAPrivateKey = authServer.certKeyPair.private,
             ): String =
                 JWT.create()
                     .withIssuedAt(issuedAt)

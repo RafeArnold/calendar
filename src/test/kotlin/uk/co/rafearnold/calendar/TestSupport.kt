@@ -91,7 +91,7 @@ class GoogleOAuthServer(
     private val clientId: String = UUID.randomUUID().toString(),
     private val clientSecret: String = UUID.randomUUID().toString(),
 ) : WireMockServer(0), AutoCloseable {
-    private val certKeyPair: RsaKeyPair = generateRsaKeyPair()
+    val certKeyPair: RsaKeyPair = generateRsaKeyPair()
 
     init {
         start()
@@ -195,8 +195,6 @@ class GoogleOAuthServer(
                 ),
         )
     }
-
-    val certPrivateKey: RSAPrivateKey = certKeyPair.private
 
     private fun stubCerts() {
         val cert = generateX509Cert(certKeyPair)

@@ -147,7 +147,7 @@ private class GoogleOAuthCallback(
                     path = "/",
                     secure = true,
                     httpOnly = true,
-                    sameSite = SameSite.Strict,
+                    sameSite = SameSite.Lax,
                 ),
             )
             .invalidateCookie(name = AUTH_CSRF_TOKEN_COOKIE_NAME)
@@ -188,7 +188,7 @@ private class OAuth(
                     GsonFactory.getDefaultInstance(),
                     clientId,
                     clientSecret,
-                    listOf("openid profile email"),
+                    listOf("openid", "profile", "email"),
                 )
                 .run { if (tokenServerUrl != null) setTokenServerUrl(GenericUrl(tokenServerUrl)) else this }
                 .run {
