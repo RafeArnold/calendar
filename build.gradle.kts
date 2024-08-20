@@ -15,12 +15,22 @@ plugins {
     id("com.github.node-gradle.node") version "7.0.2"
     id("org.flywaydb.flyway") version "10.17.0"
     id("org.jooq.jooq-codegen-gradle") version "3.19.11"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
     application
 }
 
 group = "uk.co.rafearnold"
 
 application.mainClass = "uk.co.rafearnold.calendar.MainKt"
+
+tasks.run<JavaExec> {
+    environment("DB_URL", "jdbc:sqlite:calendar.db")
+    environment("ASSETS_DIR", "src/main/resources/assets")
+    File(".env").readLines().forEach { line ->
+        val (key, value) = line.split('=')
+        environment(key, value)
+    }
+}
 
 repositories {
     mavenCentral()

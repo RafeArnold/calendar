@@ -54,7 +54,9 @@ data class Config(
     val assetsDir: String,
     val auth: AuthConfig,
     val messageLoader: MessageLoader,
-)
+) {
+    companion object
+}
 
 interface AuthConfig {
     fun createHandlerFactory(

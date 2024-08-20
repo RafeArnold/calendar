@@ -64,6 +64,8 @@ data class GoogleOauth(
         }
 
     override fun logoutHandler(): HttpHandler = logoutHandler
+
+    companion object
 }
 
 val HOST = Header.required("host")
