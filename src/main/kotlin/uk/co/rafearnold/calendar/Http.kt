@@ -235,7 +235,7 @@ fun previousDaysRoute(
             object : PreviousDaysBaseModel {
                 override val previousDays: List<PreviousDayModel> = previousDays.toPreviousDayModels(messageLoader)
                 override val nextPreviousDaysLink: String = nextPreviousDaysLink
-                override val includeNextPreviousDaysLinkOnDay: Int = 0
+                override val includeNextPreviousDaysLinkOnDay: Int = 9
             }
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }

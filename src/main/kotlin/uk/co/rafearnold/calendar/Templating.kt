@@ -25,7 +25,7 @@ fun YearMonth.toCalendarModel(
         override val nextMonthDays: List<Int> = nextMonthDays()
         override val previousDays: List<PreviousDayModel> = previousDays
         override val nextPreviousDaysLink: String = nextPreviousDaysLink
-        override val includeNextPreviousDaysLinkOnDay: Int = 10
+        override val includeNextPreviousDaysLinkOnDay: Int = 19
     }
 }
 
