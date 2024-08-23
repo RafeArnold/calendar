@@ -664,6 +664,32 @@ class EndToEndTests {
         assertThat(page.logoutButton()).hasCount(1)
     }
 
+    @Test
+    fun `back to top button is displayed when calendar is scrolled out of view`() {
+        val today = LocalDate.now()
+        val openedDays = List(5) { today.minusDays(it.toLong()) }
+        val dayTexts = openedDays.associateWith { UUID.randomUUID().toString() }
+        server = startServer(clock = today.toClock(), messageLoader = MapBackedMessageLoader(dayTexts))
+
+        DSL.using(dbUrl).use { ctx ->
+            val daysRepository = DaysRepository(ctx, today.toClock())
+            openedDays.forEach { daysRepository.markDayAsOpened(User(0, "", ""), it) }
+        }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+
+        assertThat(page.backToTopButton()).not().isVisible()
+
+        page.previousDayTexts().nth(4).scrollIntoViewIfNeeded()
+
+        assertThat(page.backToTopButton()).isVisible()
+
+        page.backToTopButton().click()
+
+        assertEquals(0, page.evaluate("window.scrollY"))
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -854,3 +880,5 @@ private fun Page.logoutButton(): Locator = getByTestId("logout")
 private fun Page.previousDayTexts(): Locator = getByTestId("previous-day-text")
 
 private fun Page.previousDayDate(): Locator = getByTestId("previous-day-date")
+
+private fun Page.backToTopButton(): Locator = getByTestId("back-to-top")

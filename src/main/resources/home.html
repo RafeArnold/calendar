@@ -14,7 +14,20 @@
 <form method="get" action="/logout" class="fixed z-50 right-0 bottom-0 m-4 items-center justify-end">
     <button data-testid="logout" class="px-2.5 py-1 rounded-lg bg-red-300 hover:bg-red-500 text-gray-800 hover:text-black">sign out</button>
 </form>
+<div class="flex justify-center"><a id="back-to-top" data-testid="back-to-top" href="#" class="fixed z-50 m-10 px-4 py-1 bg-gray-300 rounded-2xl text-center drop-shadow invisible opacity-0 duration-200 ease-in-out">back to top</a></div>
 {% include "calendar.html" %}
 {% include "previous-days-wrapper.html" %}
+<script>
+    const backToTopButtonClassList = document.getElementById("back-to-top").classList
+    window.onscroll = function () {
+        if (window.scrollY > 600) {
+            backToTopButtonClassList.remove("invisible")
+            backToTopButtonClassList.remove("opacity-0")
+        } else {
+            backToTopButtonClassList.add("invisible")
+            backToTopButtonClassList.add("opacity-0")
+        }
+    }
+</script>
 </body>
 </html>
