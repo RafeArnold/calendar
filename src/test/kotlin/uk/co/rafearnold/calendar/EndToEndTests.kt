@@ -9,6 +9,7 @@ import org.http4k.core.Uri
 import org.http4k.core.findSingle
 import org.http4k.core.queries
 import org.http4k.server.Http4kServer
+import org.jooq.impl.DSL
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
@@ -532,6 +533,112 @@ class EndToEndTests {
         }
     }
 
+    @Test
+    fun `previously opened days are displayed`() {
+        val today = LocalDate.of(2024, 8, 21)
+        val dayTexts =
+            mapOf(
+                LocalDate.of(2024, 8, 21) to UUID.randomUUID().toString(),
+                LocalDate.of(2024, 8, 20) to UUID.randomUUID().toString(),
+                LocalDate.of(2024, 8, 19) to UUID.randomUUID().toString(),
+                LocalDate.of(2024, 8, 10) to UUID.randomUUID().toString(),
+                LocalDate.of(2024, 7, 20) to UUID.randomUUID().toString(),
+                LocalDate.of(2024, 7, 10) to UUID.randomUUID().toString(),
+            )
+        server = startServer(clock = today.toClock(), messageLoader = MapBackedMessageLoader(dayTexts))
+        val page = browser.newPage()
+
+        val previousDays = mutableListOf<PreviousDay>()
+
+        page.navigateHome(port = server.port())
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 20)
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickBack()
+        previousDays.add(PreviousDay(text = dayTexts[LocalDate.of(2024, 8, 20)]!!, date = "Tue, 20 Aug 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.reload()
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 19)
+        page.clickBack()
+        previousDays.add(PreviousDay(text = dayTexts[LocalDate.of(2024, 8, 19)]!!, date = "Mon, 19 Aug 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 21)
+        page.clickBack()
+        previousDays.add(0, PreviousDay(text = dayTexts[LocalDate.of(2024, 8, 21)]!!, date = "Wed, 21 Aug 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 10)
+        page.clickBack()
+        previousDays.add(PreviousDay(text = dayTexts[LocalDate.of(2024, 8, 10)]!!, date = "Sat, 10 Aug 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(today.plusMonths(1).toYearMonth())
+        page.assertPreviousDaysAre(previousDays)
+
+        page.reload()
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickPreviousMonth()
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(today.minusMonths(1).toYearMonth())
+        page.assertPreviousDaysAre(previousDays)
+
+        page.reload()
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 10)
+        page.clickBack()
+        previousDays.add(PreviousDay(text = dayTexts[LocalDate.of(2024, 7, 10)]!!, date = "Wed, 10 Jul 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickDay(dayNum = 20)
+        page.clickBack()
+        previousDays.add(4, PreviousDay(text = dayTexts[LocalDate.of(2024, 7, 20)]!!, date = "Sat, 20 Jul 2024"))
+        page.assertPreviousDaysAre(previousDays)
+    }
+
+    @Test
+    fun `previous days are loaded lazily`() {
+        val today = LocalDate.of(2024, 8, 21)
+        val dayTexts = List(100) { today.minusDays(it.toLong()) to UUID.randomUUID().toString() }.toMap()
+        server = startServer(clock = today.toClock(), messageLoader = MapBackedMessageLoader(dayTexts))
+        val page = browser.newPage()
+
+        page.navigateHome(port = server.port())
+
+        val dateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
+
+        fun LocalDate.toPreviousDay(): PreviousDay =
+            PreviousDay(text = dayTexts[this]!!, date = format(dateTimeFormatter))
+
+        val openedDays = (0 until 100).shuffled().take(37).sorted().map { today.minusDays(it.toLong()) }
+
+        DSL.using(dbUrl).use { ctx ->
+            val daysRepository = DaysRepository(ctx, today.toClock())
+            openedDays.forEach { daysRepository.markDayAsOpened(User(0, "", ""), it) }
+        }
+
+        page.reload()
+        val previousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
+        assertEquals(20, previousDays.size)
+        page.assertPreviousDaysAre(previousDays)
+
+        page.previousDayTexts().nth(10).scrollIntoViewIfNeeded()
+        previousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
+        page.assertPreviousDaysAre(previousDays)
+
+        page.previousDayTexts().nth(20).scrollIntoViewIfNeeded()
+        previousDays.addAll(openedDays.subList(30, 37).map { it.toPreviousDay() })
+        page.assertPreviousDaysAre(previousDays)
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -661,6 +768,13 @@ private fun Page.assertIsOnAuthenticationPage(authServer: GoogleOAuthServer) {
     assertThat(this).hasURL("^${authServer.authenticationPageUrl}.*".toPattern())
 }
 
+private fun Page.assertPreviousDaysAre(expected: List<PreviousDay>) {
+    assertThat(previousDayTexts()).hasText(expected.map { it.text }.toTypedArray())
+    assertThat(previousDayDate()).hasText(expected.map { it.date }.toTypedArray())
+}
+
+private data class PreviousDay(val text: String, val date: String)
+
 private fun Page.clickDay(dayNum: Int) {
     assertThat(dayText()).not().isVisible()
     assertThat(day(dayNum)).hasText(dayNum.toString())
@@ -711,3 +825,7 @@ private fun Page.todayButton(): Locator = getByTestId("today")
 private fun Page.monthYear(): Locator = getByTestId("month-year")
 
 private fun Page.logoutButton(): Locator = getByTestId("logout")
+
+private fun Page.previousDayTexts(): Locator = getByTestId("previous-day-text")
+
+private fun Page.previousDayDate(): Locator = getByTestId("previous-day-date")
