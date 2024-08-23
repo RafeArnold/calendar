@@ -43,6 +43,7 @@ private fun YearMonth.nextMonthDays(): List<Int> {
 
 @Suppress("unused")
 class HomeViewModel(
+    val justCalendar: Boolean,
     val previousMonthLink: String,
     val nextMonthLink: String,
     val todayLink: String,
@@ -51,7 +52,7 @@ class HomeViewModel(
     val monthImageLink: String,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
-    override fun template(): String = "home"
+    override fun template(): String = if (justCalendar) "calendar" else "home"
 }
 
 @Suppress("unused")

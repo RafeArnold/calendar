@@ -636,6 +636,34 @@ class EndToEndTests {
         page.assertPreviousDaysAre(previousDays)
     }
 
+    @Test
+    fun `month navigation only updates the calendar`() {
+        val today = LocalDate.now()
+        val openedDays = List(50) { today.minusDays(it.toLong()) }
+        val dayTexts = openedDays.associateWith { UUID.randomUUID().toString() }
+        server = startServer(clock = today.toClock(), messageLoader = MapBackedMessageLoader(dayTexts))
+
+        DSL.using(dbUrl).use { ctx ->
+            val daysRepository = DaysRepository(ctx, today.toClock())
+            openedDays.forEach { daysRepository.markDayAsOpened(User(0, "", ""), it) }
+        }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.previousDayTexts().nth(10).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(20).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(30).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(40).scrollIntoViewIfNeeded()
+        assertThat(page.previousDayTexts()).hasCount(50)
+
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(today.plusMonths(1).toYearMonth())
+
+        assertThat(page.previousDayTexts()).hasCount(50)
+        assertThat(page.calendar()).hasCount(1)
+        assertThat(page.logoutButton()).hasCount(1)
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),

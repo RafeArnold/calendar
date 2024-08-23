@@ -171,6 +171,7 @@ class Index(
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
         val viewModel =
             HomeViewModel(
+                justCalendar = request.header("hx-request") != null,
                 previousMonthLink = monthLink(month.minusMonths(1)),
                 nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",
