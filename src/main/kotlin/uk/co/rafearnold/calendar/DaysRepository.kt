@@ -18,6 +18,19 @@ class DaysRepository(private val ctx: DSLContext, private val clock: Clock) {
             .fetch()
             .map { it.date!!.dayOfMonth }
 
+    fun getOpenedDaysDescFrom(
+        user: User,
+        from: LocalDate,
+        limit: Int,
+    ): List<LocalDate> =
+        ctx.selectFrom(OPENED_DAYS)
+            .where(OPENED_DAYS.USER_ID.eq(user.id))
+            .and(OPENED_DAYS.DATE.lessOrEqual(from))
+            .orderBy(OPENED_DAYS.DATE.desc())
+            .limit(limit)
+            .fetch()
+            .map { it.date!! }
+
     fun markDayAsOpened(
         user: User,
         date: LocalDate,

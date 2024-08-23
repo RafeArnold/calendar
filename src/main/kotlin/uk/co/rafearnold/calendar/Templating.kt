@@ -14,6 +14,8 @@ import java.time.format.DateTimeFormatter
 
 fun YearMonth.toCalendarModel(
     openedDays: List<Int>,
+    previousDays: List<PreviousDayModel>,
+    nextPreviousDaysLink: String,
     clock: Clock,
 ): CalendarBaseModel {
     val days = (1..lengthOfMonth()).map { atDay(it).toDayModel(opened = openedDays.contains(it), now = clock.toDate()) }
@@ -21,6 +23,9 @@ fun YearMonth.toCalendarModel(
         override val days: List<DayModel> = days
         override val previousMonthDays: List<Int> = previousMonthDays()
         override val nextMonthDays: List<Int> = nextMonthDays()
+        override val previousDays: List<PreviousDayModel> = previousDays
+        override val nextPreviousDaysLink: String = nextPreviousDaysLink
+        override val includeNextPreviousDaysLinkOnDay: Int = 10
     }
 }
 
@@ -53,7 +58,7 @@ class HomeViewModel(
 class DaysViewModel(
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
-    override fun template(): String = "days"
+    override fun template(): String = "hx-days"
 }
 
 @Suppress("unused")
@@ -65,10 +70,22 @@ class DayViewModel(
     override fun template(): String = "day"
 }
 
-interface CalendarBaseModel {
+class PreviousDaysViewModel(
+    previousDaysBaseModel: PreviousDaysBaseModel,
+) : ViewModel, PreviousDaysBaseModel by previousDaysBaseModel {
+    override fun template(): String = "previous-days"
+}
+
+interface CalendarBaseModel : PreviousDaysBaseModel {
     val days: List<DayModel>
     val previousMonthDays: List<Int>
     val nextMonthDays: List<Int>
+}
+
+interface PreviousDaysBaseModel {
+    val previousDays: List<PreviousDayModel>
+    val nextPreviousDaysLink: String
+    val includeNextPreviousDaysLinkOnDay: Int
 }
 
 private fun LocalDate.toDayModel(
@@ -78,6 +95,8 @@ private fun LocalDate.toDayModel(
     DayModel(link = "/day/" + format(DateTimeFormatter.ISO_LOCAL_DATE), opened = opened, disabled = this.isAfter(now))
 
 data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean)
+
+data class PreviousDayModel(val date: String, val text: String)
 
 class PebbleTemplateRenderer(
     private val engine: PebbleEngine =

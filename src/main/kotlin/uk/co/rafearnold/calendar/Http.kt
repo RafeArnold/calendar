@@ -100,14 +100,17 @@ fun Config.startServer(): Http4kServer {
     val requestContexts = RequestContexts()
     val userLens = userLens(requestContexts)
 
+    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository)
+
     val router =
         routes(
             Assets(assetDirs = assetDirs),
             auth.createHandlerFactory(userRepository, userLens, clock)
                 .routes(
-                    Index(view, clock, daysRepository, userLens),
-                    DaysRoute(view, clock, daysRepository, userLens),
+                    Index(view, clock, userLens, calendarModelHelper),
+                    DaysRoute(view, clock, userLens, calendarModelHelper),
                     DayRoute(view, messageLoader, clock, daysRepository, userLens),
+                    previousDaysRoute(view, messageLoader, clock, daysRepository, userLens),
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
             logoutRoute(auth),
@@ -157,22 +160,24 @@ val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
 
 val monthQuery = Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optional("month")
 
+val previousDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
+
 class Index(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
-    daysRepo: DaysRepository,
     user: RequestContextLens<User>,
-) : RoutingHttpHandler by "/" bind GET to {
-        val date = monthQuery(it) ?: clock.now().toLocalDate().toYearMonth()
+    calendarModelHelper: CalendarModelHelper,
+) : RoutingHttpHandler by "/" bind GET to { request ->
+        val month = monthQuery(request) ?: clock.toDate().toYearMonth()
         val viewModel =
             HomeViewModel(
-                previousMonthLink = monthLink(date.minusMonths(1)),
-                nextMonthLink = monthLink(date.plusMonths(1)),
+                previousMonthLink = monthLink(month.minusMonths(1)),
+                nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",
-                month = date.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
-                year = date.year,
-                monthImageLink = monthImageLink(date),
-                calendarBaseModel = date.toCalendarModel(daysRepo.getOpenedDaysOfMonth(user(it), date), clock),
+                month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
+                year = month.year,
+                monthImageLink = monthImageLink(month),
+                calendarBaseModel = calendarModelHelper.create(month, user(request)),
             )
         Response(OK).with(view of viewModel)
     }
@@ -180,12 +185,11 @@ class Index(
 class DaysRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
-    daysRepo: DaysRepository,
     user: RequestContextLens<User>,
+    calendarModelHelper: CalendarModelHelper,
 ) : RoutingHttpHandler by "/days" bind GET to { request ->
-        val date = monthQuery(request) ?: clock.now().toLocalDate().toYearMonth()
-        val openedDays = daysRepo.getOpenedDaysOfMonth(user(request), date)
-        Response(OK).with(view of DaysViewModel(date.toCalendarModel(openedDays, clock)))
+        val month = monthQuery(request) ?: clock.toDate().toYearMonth()
+        Response(OK).with(view of DaysViewModel(calendarModelHelper.create(month, user(request))))
     }
 
 class DayRoute(
@@ -213,6 +217,54 @@ class DayRoute(
         }
     }
 
+val previousDaysFromQuery = Query.map(StringBiDiMappings.localDate(DateTimeFormatter.ISO_LOCAL_DATE)).optional("from")
+
+fun previousDaysRoute(
+    view: BiDiBodyLens<ViewModel>,
+    messageLoader: MessageLoader,
+    clock: Clock,
+    daysRepo: DaysRepository,
+    user: RequestContextLens<User>,
+): RoutingHttpHandler =
+    "/previous-days" bind GET to { request ->
+        val from = previousDaysFromQuery(request) ?: clock.toDate()
+        val previousDays = daysRepo.getOpenedDaysDescFrom(user(request), from = from, limit = 10)
+        val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        val previousDaysBaseModel =
+            object : PreviousDaysBaseModel {
+                override val previousDays: List<PreviousDayModel> = previousDays.toPreviousDayModels(messageLoader)
+                override val nextPreviousDaysLink: String = nextPreviousDaysLink
+                override val includeNextPreviousDaysLinkOnDay: Int = 0
+            }
+        Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
+    }
+
+class CalendarModelHelper(
+    private val messageLoader: MessageLoader,
+    private val clock: Clock,
+    private val daysRepo: DaysRepository,
+) {
+    fun create(
+        month: YearMonth,
+        user: User,
+    ): CalendarBaseModel {
+        val openedDays = daysRepo.getOpenedDaysOfMonth(user, month)
+        val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = clock.toDate(), limit = 20)
+        val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        return month.toCalendarModel(
+            openedDays = openedDays,
+            previousDays = previousDays.toPreviousDayModels(messageLoader),
+            nextPreviousDaysLink = nextPreviousDaysLink,
+            clock = clock,
+        )
+    }
+}
+
+fun List<LocalDate>.toPreviousDayModels(messageLoader: MessageLoader) =
+    mapNotNull { prevDate ->
+        messageLoader[prevDate]?.let { PreviousDayModel(date = prevDate.format(previousDateFormatter), text = it) }
+    }
+
 fun logoutRoute(auth: AuthConfig): RoutingHttpHandler = "/logout" bind GET to auth.logoutHandler()
 
 fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
@@ -226,6 +278,9 @@ private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(mon
 private fun daysLink(month: YearMonth) = "/days?month=" + monthFormatter.format(month)
 
 private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
+
+private fun previousDaysLink(from: LocalDate?) =
+    "/previous-days" + if (from != null) "?from=" + from.format(DateTimeFormatter.ISO_LOCAL_DATE) else ""
 
 val forbiddenFilter: Filter =
     Filter { next ->
