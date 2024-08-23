@@ -609,10 +609,6 @@ class EndToEndTests {
         val today = LocalDate.of(2024, 8, 21)
         val dayTexts = List(100) { today.minusDays(it.toLong()) to UUID.randomUUID().toString() }.toMap()
         server = startServer(clock = today.toClock(), messageLoader = MapBackedMessageLoader(dayTexts))
-        val page = browser.newPage()
-
-        page.navigateHome(port = server.port())
-
         val dateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
 
         fun LocalDate.toPreviousDay(): PreviousDay =
@@ -625,7 +621,8 @@ class EndToEndTests {
             openedDays.forEach { daysRepository.markDayAsOpened(User(0, "", ""), it) }
         }
 
-        page.reload()
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
         val previousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
         assertEquals(20, previousDays.size)
         page.assertPreviousDaysAre(previousDays)
