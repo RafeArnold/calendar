@@ -627,11 +627,11 @@ class EndToEndTests {
         assertEquals(20, previousDays.size)
         page.assertPreviousDaysAre(previousDays)
 
-        page.previousDayTexts().nth(10).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
         previousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
         page.assertPreviousDaysAre(previousDays)
 
-        page.previousDayTexts().nth(20).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(29).scrollIntoViewIfNeeded()
         previousDays.addAll(openedDays.subList(30, 37).map { it.toPreviousDay() })
         page.assertPreviousDaysAre(previousDays)
     }
@@ -650,10 +650,9 @@ class EndToEndTests {
 
         val page = browser.newPage()
         page.navigateHome(port = server.port())
-        page.previousDayTexts().nth(10).scrollIntoViewIfNeeded()
-        page.previousDayTexts().nth(20).scrollIntoViewIfNeeded()
-        page.previousDayTexts().nth(30).scrollIntoViewIfNeeded()
-        page.previousDayTexts().nth(40).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(29).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(39).scrollIntoViewIfNeeded()
         assertThat(page.previousDayTexts()).hasCount(50)
 
         page.clickNextMonth()
