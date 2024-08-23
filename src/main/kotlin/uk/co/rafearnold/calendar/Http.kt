@@ -68,6 +68,8 @@ interface AuthConfig {
     ): RoutingHandlerFactory
 
     fun logoutHandler(): HttpHandler
+
+    companion object
 }
 
 data object NoAuth : AuthConfig {

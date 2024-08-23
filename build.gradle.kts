@@ -27,6 +27,7 @@ tasks.run<JavaExec> {
     environment("DB_URL", "jdbc:sqlite:calendar.db")
     environment("ASSET_DIRS", "src/main/resources/assets")
     environment("HOT_RELOADING", "true")
+    environment("ENABLE_AUTH", "false")
     File(".env").readLines().forEach { line ->
         val (key, value) = line.split('=')
         environment(key, value)

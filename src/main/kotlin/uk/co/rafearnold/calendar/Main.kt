@@ -19,8 +19,11 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config =
         dbUrl = env.getValue("DB_URL"),
         assetDirs = env["ASSET_DIRS"]?.split(',') ?: emptyList(),
         hotReloading = env["HOT_RELOADING"] == "true",
-        auth = GoogleOauth.fromEnv(env),
+        auth = AuthConfig.fromEnv(env),
     ) { "something sweet" }
+
+fun AuthConfig.Companion.fromEnv(env: Map<String, String>): AuthConfig =
+    if (env["ENABLE_AUTH"]?.toBooleanStrict() != false) GoogleOauth.fromEnv(env) else NoAuth
 
 fun GoogleOauth.Companion.fromEnv(env: Map<String, String>): GoogleOauth =
     GoogleOauth(
