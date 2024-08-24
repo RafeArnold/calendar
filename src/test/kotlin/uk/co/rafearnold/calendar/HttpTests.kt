@@ -519,6 +519,19 @@ class HttpTests {
         assertAssetIsFrom("index.min.css", assetsDir1)
     }
 
+    @Test
+    fun `oauth callback base url is configurable`() {
+        val serverBaseUrl = URI("https://example.com/test")
+        server = startServer(auth = googleOauth(serverBaseUrl = serverBaseUrl))
+
+        val response = httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
+        assertEquals(302, response.statusCode())
+        val location = response.headers().firstValue("location").map { Uri.of(it) }.getOrNull()
+        assertNotNull(location)
+        val queryParameters = location.queries().toParametersMap()
+        assertEquals(listOf(serverBaseUrl.resolve("/oauth/code").toASCIIString()), queryParameters["redirect_uri"])
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -587,13 +600,14 @@ class HttpTests {
         ) { "whatever" }.startServer()
 
     private fun googleOauth(
+        serverBaseUrl: URI? = null,
         tokenServerUrl: URI? = null,
         clientId: String = UUID.randomUUID().toString(),
         clientSecret: String = UUID.randomUUID().toString(),
         allowedUserEmails: Collection<String> = emptyList(),
         tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
     ) = GoogleOauth(
-        serverBaseUrl = null,
+        serverBaseUrl = serverBaseUrl,
         authServerUrl = null,
         tokenServerUrl = tokenServerUrl,
         publicCertsUrl = null,
