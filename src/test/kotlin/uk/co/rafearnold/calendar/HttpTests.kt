@@ -9,6 +9,7 @@ import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.queries
 import org.http4k.core.toParametersMap
+import org.http4k.routing.ResourceLoader
 import org.http4k.server.Http4kServer
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.AfterEach
@@ -493,7 +494,15 @@ class HttpTests {
         assertNotNull(javaClass.getResource("/assets/index.min.css"))
         val indexCssContent = UUID.randomUUID().toString()
         assetsDir1.resolve("index.min.css").writeText(indexCssContent)
-        server = startServer(assetDirs = listOf(assetsDir1.toString(), assetsDir2.toString()))
+        val assetLoader =
+            ChainResourceLoader(
+                listOf(
+                    ResourceLoader.Directory(baseDir = assetsDir1.toString()),
+                    ResourceLoader.Directory(baseDir = assetsDir2.toString()),
+                    ResourceLoader.Classpath(basePackagePath = "/assets"),
+                ),
+            )
+        server = startServer(assetLoader = assetLoader)
 
         fun assertAssetIsFrom(
             path: String,
@@ -566,13 +575,13 @@ class HttpTests {
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
         auth: AuthConfig = NoAuth,
-        assetDirs: List<String> = emptyList(),
+        assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
     ): Http4kServer =
         Config(
             port = 0,
             clock = clock,
             dbUrl = dbUrl,
-            assetDirs = assetDirs,
+            assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
         ) { "whatever" }.startServer()

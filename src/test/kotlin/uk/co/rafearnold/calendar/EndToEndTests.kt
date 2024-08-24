@@ -8,6 +8,7 @@ import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import org.http4k.core.Uri
 import org.http4k.core.findSingle
 import org.http4k.core.queries
+import org.http4k.routing.ResourceLoader
 import org.http4k.server.Http4kServer
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.AfterAll
@@ -394,7 +395,8 @@ class EndToEndTests {
         copyImage("cat-1.jpg", monthImagesDir.resolve("2024-07.jpg"))
         copyImage("cat-2.jpg", monthImagesDir.resolve("2024-06.jpg"))
         copyImage("cat-3.jpg", monthImagesDir.resolve("2024-08.jpg"))
-        server = startServer(clock = clock, assetDirs = listOf(assetsDir.toString())) { "whatever" }
+        val assetLoader = ResourceLoader.Directory(baseDir = assetsDir.toString())
+        server = startServer(clock = clock, assetLoader = assetLoader) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
@@ -719,7 +721,7 @@ class EndToEndTests {
 
     private fun startServer(
         clock: Clock = Clock.systemUTC(),
-        assetDirs: List<String> = emptyList(),
+        assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         auth: AuthConfig = NoAuth,
         messageLoader: MessageLoader,
     ): Http4kServer =
@@ -727,7 +729,7 @@ class EndToEndTests {
             port = 0,
             clock = clock,
             dbUrl = dbUrl,
-            assetDirs = assetDirs,
+            assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
             messageLoader = messageLoader,

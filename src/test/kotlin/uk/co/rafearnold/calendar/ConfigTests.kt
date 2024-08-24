@@ -1,12 +1,18 @@
 package uk.co.rafearnold.calendar
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.net.URI
+import java.nio.file.Path
 import java.time.Clock
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.io.path.absolutePathString
-import kotlin.io.path.createTempDirectory
+import kotlin.io.path.createDirectories
+import kotlin.io.path.createFile
+import kotlin.io.path.writeText
 import kotlin.random.Random
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -20,9 +26,6 @@ class ConfigTests {
     fun `config can be loaded from map`() {
         val port = Random.nextInt()
         val dbUrl = UUID.randomUUID().toString()
-        val assetDir1 = createTempDirectory()
-        val assetDir2 = "/app/${UUID.randomUUID()}/assets"
-        val assetDirs = "${assetDir1.absolutePathString()},$assetDir2"
         val hotReloading = Random.nextBoolean()
         val serverBaseUrl = "https://${UUID.randomUUID()}.com/calendar"
         val oauthClientId = UUID.randomUUID().toString()
@@ -33,7 +36,7 @@ class ConfigTests {
             mapOf(
                 "PORT" to port.toString(),
                 "DB_URL" to dbUrl,
-                "ASSET_DIRS" to assetDirs,
+                "ASSET_DIRS" to "",
                 "HOT_RELOADING" to hotReloading.toString(),
                 "SERVER_BASE_URL" to serverBaseUrl,
                 "GOOGLE_OAUTH_CLIENT_ID" to oauthClientId,
@@ -44,7 +47,10 @@ class ConfigTests {
         assertEquals(port, config.port)
         assertEquals(Clock.systemUTC(), config.clock)
         assertEquals(dbUrl, config.dbUrl)
-        assertEquals(listOf(assetDir1.absolutePathString(), assetDir2), config.assetDirs)
+        val assetLoader = config.assetLoader
+        val expectedHtmxBytes = javaClass.getResource("/assets/htmx/htmx.min.js")?.readBytes()
+        val htmxBytes = assetLoader.load("htmx/htmx.min.js")?.readBytes()
+        assertContentEquals(expectedHtmxBytes, htmxBytes)
         assertEquals(hotReloading, config.hotReloading)
         val auth = config.auth
         assertIs<GoogleOauth>(auth)
@@ -68,8 +74,11 @@ class ConfigTests {
     }
 
     @Test
-    fun `asset dirs defaults to empty list`() {
-        assertEquals(emptyList(), Config.fromEnv(noAuthEnv).assetDirs)
+    fun `asset loader defaults to just classpath`() {
+        val config = Config.fromEnv(noAuthEnv)
+        val expectedCssBytes = javaClass.getResource("/assets/index.min.css")?.readBytes()
+        val cssBytes = config.assetLoader.load("index.min.css")?.readBytes()
+        assertContentEquals(expectedCssBytes, cssBytes)
     }
 
     @Test
@@ -88,5 +97,26 @@ class ConfigTests {
         val auth = Config.fromEnv(this.env + env).auth
         assertIs<GoogleOauth>(auth)
         assertNull(auth.serverBaseUrl)
+    }
+
+    @Test
+    fun `messages are loaded from asset dirs`(
+        @TempDir assetDir: Path,
+    ) {
+        val messagesDir = assetDir.resolve("messages").createDirectories()
+        val jan1Text = UUID.randomUUID().toString()
+        val may2Text = UUID.randomUUID().toString()
+        val dec3Text = UUID.randomUUID().toString()
+        val aug4Text = UUID.randomUUID().toString()
+        messagesDir.resolve("2024-01-01").createFile().writeText(jan1Text)
+        messagesDir.resolve("2024-05-02").createFile().writeText(may2Text)
+        messagesDir.resolve("2024-12-03").createFile().writeText(dec3Text)
+        messagesDir.resolve("2024-08-04").createFile().writeText(aug4Text)
+        val config = Config.fromEnv(noAuthEnv + mapOf("ASSET_DIRS" to assetDir.absolutePathString()))
+        val messageLoader = config.messageLoader
+        assertEquals(jan1Text, messageLoader[LocalDate.of(2024, 1, 1)])
+        assertEquals(may2Text, messageLoader[LocalDate.of(2024, 5, 2)])
+        assertEquals(dec3Text, messageLoader[LocalDate.of(2024, 12, 3)])
+        assertEquals(aug4Text, messageLoader[LocalDate.of(2024, 8, 4)])
     }
 }

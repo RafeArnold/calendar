@@ -52,7 +52,7 @@ data class Config(
     val port: Int,
     val clock: Clock,
     val dbUrl: String,
-    val assetDirs: List<String>,
+    val assetLoader: ResourceLoader,
     val hotReloading: Boolean,
     val auth: AuthConfig,
     val messageLoader: MessageLoader,
@@ -104,7 +104,7 @@ fun Config.startServer(): Http4kServer {
 
     val router =
         routes(
-            Assets(assetDirs = assetDirs),
+            Assets(assetLoader = assetLoader),
             auth.createHandlerFactory(userRepository, userLens, clock)
                 .routes(
                     Index(view, clock, userLens, calendarModelHelper),
@@ -140,11 +140,13 @@ fun interface MessageLoader {
     operator fun get(date: LocalDate): String?
 }
 
-class Assets(
-    assetDirs: List<String>,
-) : RoutingHttpHandler by
-    static(ChainResourceLoader(assetDirs.map { ResourceLoader.Directory(it) } + ResourceLoader.Classpath("/assets")))
-        .withBasePath("/assets")
+class AssetMessageLoader(private val resourceLoader: ResourceLoader) : MessageLoader {
+    override fun get(date: LocalDate): String? =
+        resourceLoader.load("messages/" + date.format(DateTimeFormatter.ISO_LOCAL_DATE))
+            ?.openStream()?.readAllBytes()?.decodeToString()
+}
+
+class Assets(assetLoader: ResourceLoader) : RoutingHttpHandler by static(assetLoader).withBasePath("/assets")
 
 class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceLoader {
     override fun load(path: String): URL? {
