@@ -11,9 +11,23 @@
     <link href="/assets/index.min.css" rel="stylesheet">
 </head>
 <body class="w-dvw h-dvh">
-<form method="get" action="/logout" class="fixed z-50 right-0 bottom-0 m-4 items-center justify-end">
-    <button data-testid="logout" class="px-2.5 py-1 rounded-lg bg-red-300 hover:bg-red-500 text-gray-800 hover:text-black">sign out</button>
-</form>
+{% include "error.html" %}
+<div class="fixed z-20 right-0 bottom-0 m-4 flex gap-4 text-nowrap items-center justify-end">
+    {% if model.impersonatingEmail != null %}
+    <div data-testid="impersonating-message">impersonating {{ model.impersonatingEmail }}</div>
+    <form method="post" action="/impersonate/stop">
+        <button data-testid="stop-impersonating" class="px-2.5 py-1 rounded-lg bg-gray-300 hover:bg-gray-500 text-gray-800 hover:text-black">stop impersonating</button>
+    </form>
+    {% elseif model.canImpersonate %}
+    <form hx-post="/impersonate" class="flex gap-1 items-center">
+        <label><span class="sr-only">email</span><input data-testid="impersonate-email" name="email" type="email" required class="p-0.5 px-2 border-2 rounded-lg"></label>
+        <button data-testid="impersonate" class="px-2.5 py-1 rounded-lg bg-gray-300 hover:bg-gray-500 text-gray-800 hover:text-black">impersonate</button>
+    </form>
+    {% endif %}
+    <form method="get" action="/logout">
+        <button data-testid="logout" class="px-2.5 py-1 rounded-lg bg-red-300 hover:bg-red-500 text-gray-800 hover:text-black">sign out</button>
+    </form>
+</div>
 <div class="flex justify-center"><a id="back-to-top" data-testid="back-to-top" href="#" class="fixed z-50 m-10 px-4 py-1 bg-gray-300 rounded-2xl text-center drop-shadow invisible opacity-0 duration-200 ease-in-out">back to top</a></div>
 {% include "calendar.html" %}
 {% include "previous-days-wrapper.html" %}

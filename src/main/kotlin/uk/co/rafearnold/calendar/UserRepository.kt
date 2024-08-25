@@ -8,6 +8,9 @@ class UserRepository(private val ctx: DSLContext) {
     fun getByGoogleId(subjectId: String): User? =
         ctx.selectFrom(USERS).where(USERS.GOOGLE_SUBJECT_ID.eq(subjectId)).fetchOne()?.toUser()
 
+    fun getByEmail(email: String): User? =
+        ctx.selectFrom(USERS).where(USERS.EMAIL_ADDRESS.eq(email)).fetchOne()?.toUser()
+
     fun createUserIfNoneExists(
         email: String,
         googleSubjectId: String,

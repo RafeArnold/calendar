@@ -32,6 +32,7 @@ class ConfigTests {
         val oauthClientSecret = UUID.randomUUID().toString()
         val allowedEmail1 = "${UUID.randomUUID()}@example.com"
         val allowedEmail2 = "${UUID.randomUUID()}@gmail.com"
+        val impersonatorEmail2 = "${UUID.randomUUID()}@gmail.com"
         val env =
             mapOf(
                 "PORT" to port.toString(),
@@ -42,6 +43,7 @@ class ConfigTests {
                 "GOOGLE_OAUTH_CLIENT_ID" to oauthClientId,
                 "GOOGLE_OAUTH_CLIENT_SECRET" to oauthClientSecret,
                 "ALLOWED_USERS" to "$allowedEmail1 $allowedEmail2",
+                "IMPERSONATORS" to "$allowedEmail1 $impersonatorEmail2",
             )
         val config = Config.fromEnv(env)
         assertEquals(port, config.port)
@@ -61,6 +63,7 @@ class ConfigTests {
         assertEquals(oauthClientId, auth.clientId)
         assertEquals(oauthClientSecret, auth.clientSecret)
         assertEquals(listOf(allowedEmail1, allowedEmail2), auth.allowedUserEmails)
+        assertEquals(listOf(allowedEmail1, impersonatorEmail2), config.impersonatorEmails)
     }
 
     @Test
@@ -118,5 +121,10 @@ class ConfigTests {
         assertEquals(may2Text, messageLoader[LocalDate.of(2024, 5, 2)])
         assertEquals(dec3Text, messageLoader[LocalDate.of(2024, 12, 3)])
         assertEquals(aug4Text, messageLoader[LocalDate.of(2024, 8, 4)])
+    }
+
+    @Test
+    fun `impersonating emails default to empty list`() {
+        assertEquals(emptyList(), Config.fromEnv(noAuthEnv).impersonatorEmails)
     }
 }

@@ -9,6 +9,7 @@ import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.queries
 import org.http4k.core.toParametersMap
+import org.http4k.core.toUrlFormEncoded
 import org.http4k.routing.ResourceLoader
 import org.http4k.server.Http4kServer
 import org.jooq.impl.DSL
@@ -18,10 +19,11 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.ValueSource
+import org.junit.jupiter.params.provider.CsvSource
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
+import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Files
@@ -92,12 +94,24 @@ class HttpTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["/", "/day/2024-08-08", "/days"])
-    fun `user is redirected to login on entry`(url: String) {
+    @CsvSource(
+        """
+            /, GET
+            /day/2024-08-08, GET
+            /days, GET
+            /previous-days, GET
+            /impersonate, POST
+        """,
+    )
+    fun `user is redirected to login on entry`(
+        url: String,
+        method: String,
+    ) {
         val clientId = UUID.randomUUID().toString()
         server = startServer(auth = googleOauth(clientId = clientId))
 
-        val response = httpClient.send(HttpRequest.newBuilder(server.uri(url)).GET().build(), BodyHandlers.discarding())
+        val request = HttpRequest.newBuilder(server.uri(url)).method(method, BodyPublishers.noBody()).build()
+        val response = httpClient.send(request, BodyHandlers.discarding())
         assertEquals(302, response.statusCode())
         val location = response.headers().firstValue("location").map { Uri.of(it) }.getOrNull()
         assertNotNull(location)
@@ -131,12 +145,7 @@ class HttpTests {
                 authCode = authCode,
                 redirectUri = server.oauthUri(code = null, state = null).toASCIIString(),
             )
-            val idTokenCookie =
-                response.headers().allValues("set-cookie")
-                    .map { Cookie.parse(it)!! }
-                    .filter { it.name == "id_token" }
-                    .apply { assertEquals(1, size) }
-                    .first()
+            val idTokenCookie = response.idTokenCookie()
             assertEquals(SameSite.Lax, idTokenCookie.sameSite)
             assertTrue(idTokenCookie.httpOnly)
             assertTrue(idTokenCookie.secure)
@@ -532,12 +541,101 @@ class HttpTests {
         assertEquals(listOf(serverBaseUrl.resolve("/oauth/code").toASCIIString()), queryParameters["redirect_uri"])
     }
 
+    @Test
+    fun `impersonating sets cookie`() {
+        GoogleOAuthServer().use { authServer ->
+            val impersonatorEmail = "admin@gmail.com"
+            val impersonatedUserEmail = "test@gmail.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, impersonatedUserEmail))
+            server = startServer(auth = auth, impersonatorEmails = listOf(impersonatorEmail))
+
+            // Make sure the impersonated user already exists in the db.
+            DSL.using(dbUrl).use {
+                UserRepository(it).createUserIfNoneExists(
+                    email = impersonatedUserEmail,
+                    googleSubjectId = UUID.randomUUID().toString(),
+                )
+            }
+
+            val idTokenCookie = login(email = impersonatorEmail, authServer = authServer).idTokenCookie()
+            val form = listOf("email" to impersonatedUserEmail)
+            val request =
+                HttpRequest.newBuilder(server.uri("/impersonate"))
+                    .header("cookie", idTokenCookie.keyValueCookieString())
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(BodyPublishers.ofString(form.toUrlFormEncoded()))
+                    .build()
+            val response = httpClient.send(request, BodyHandlers.ofString())
+            assertEquals(200, response.statusCode())
+            assertEquals("", response.body())
+            assertEquals(listOf("/"), response.headers().allValues("hx-redirect"))
+            val setCookies = response.headers().allValues("set-cookie").map { Cookie.parse(it)!! }
+            assertEquals(setOf("impersonating_email"), setCookies.map { it.name }.toSet())
+            assertEquals(1, setCookies.filter { it.name == "impersonating_email" }.size)
+            val impersonatingEmailCookie = setCookies.first { it.name == "impersonating_email" }
+            assertEquals(impersonatedUserEmail, impersonatingEmailCookie.value)
+            assertEquals(1800, impersonatingEmailCookie.maxAge)
+            assertNull(impersonatingEmailCookie.expires)
+            assertNull(impersonatingEmailCookie.domain)
+            assertEquals("/", impersonatingEmailCookie.path)
+            assertTrue(impersonatingEmailCookie.secure)
+            assertTrue(impersonatingEmailCookie.httpOnly)
+            assertEquals(SameSite.Strict, impersonatingEmailCookie.sameSite)
+        }
+    }
+
+    @Test
+    fun `non-impersonators cannot impersonate`() {
+        val impersonatorEmail = "admin@example.com"
+        val otherUserEmail1 = "test@gmail.com"
+        val otherUserEmail2 = "me@example.com"
+        GoogleOAuthServer().use { authServer ->
+            val auth =
+                authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail1, otherUserEmail2))
+            server = startServer(auth = auth, impersonatorEmails = listOf(impersonatorEmail))
+
+            val impersonatedIdTokenCookie = login(email = otherUserEmail1, authServer = authServer).idTokenCookie()
+            val impersonatorIdTokenCookie = login(email = impersonatorEmail, authServer = authServer).idTokenCookie()
+
+            run {
+                val form = listOf("email" to otherUserEmail2)
+                val request =
+                    HttpRequest.newBuilder(server.uri("/impersonate"))
+                        .header("cookie", impersonatedIdTokenCookie.keyValueCookieString())
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(BodyPublishers.ofString(form.toUrlFormEncoded()))
+                        .build()
+                val response = httpClient.send(request, BodyHandlers.ofString())
+                assertEquals(403, response.statusCode())
+                assertEquals("", response.body())
+                val setCookies = response.headers().allValues("set-cookie").map { Cookie.parse(it)!! }
+                assertEquals(setOf(), setCookies.map { it.name }.toSet())
+            }
+
+            run {
+                val form = listOf("email" to otherUserEmail1)
+                val request =
+                    HttpRequest.newBuilder(server.uri("/impersonate"))
+                        .header("cookie", impersonatorIdTokenCookie.keyValueCookieString())
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(BodyPublishers.ofString(form.toUrlFormEncoded()))
+                        .build()
+                val response = httpClient.send(request, BodyHandlers.ofString())
+                assertEquals(200, response.statusCode())
+                assertEquals("", response.body())
+                assertEquals(listOf("/"), response.headers().allValues("hx-redirect"))
+                val setCookies = response.headers().allValues("set-cookie").map { Cookie.parse(it)!! }
+                assertEquals(setOf("impersonating_email"), setCookies.map { it.name }.toSet())
+            }
+        }
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
     private fun login(
         email: String,
-        authCode: String,
+        authCode: String = UUID.randomUUID().toString(),
         authServer: GoogleOAuthServer,
     ): HttpResponse<String> {
         val response = httpClient.send(HttpRequest.newBuilder(server.uri("/")).GET().build(), BodyHandlers.discarding())
@@ -589,6 +687,7 @@ class HttpTests {
         clock: Clock = Clock.systemUTC(),
         auth: AuthConfig = NoAuth,
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
+        impersonatorEmails: List<String> = emptyList(),
     ): Http4kServer =
         Config(
             port = 0,
@@ -597,6 +696,7 @@ class HttpTests {
             assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
+            impersonatorEmails = impersonatorEmails,
         ) { "whatever" }.startServer()
 
     private fun googleOauth(
@@ -619,3 +719,10 @@ class HttpTests {
 
     private fun <T> executeStatement(execute: (Statement) -> T): T = executeStatement(dbUrl = dbUrl, execute)
 }
+
+private fun HttpResponse<String>.idTokenCookie(): Cookie =
+    headers().allValues("set-cookie")
+        .map { Cookie.parse(it)!! }
+        .filter { it.name == "id_token" }
+        .apply { assertEquals(1, size) }
+        .first()

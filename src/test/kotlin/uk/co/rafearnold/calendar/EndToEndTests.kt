@@ -342,30 +342,26 @@ class EndToEndTests {
 
         page.navigateHome(port = server.port())
         page.assertCurrentMonthIs(YearMonth.of(2024, 7))
-        page.assertUnopenedDaysAre(1..31)
+        page.assertOpenedDaysAre(emptyList(), YearMonth.of(2024, 7))
 
         page.clickDay(1)
         page.clickBack()
-        page.assertUnopenedDaysAre(2..31)
-        page.assertOpenedDaysAre(listOf(1))
+        page.assertOpenedDaysAre(listOf(1), YearMonth.of(2024, 7))
 
         page.clickDay(5)
         page.clickBack()
-        page.assertUnopenedDaysAre((2..4) + (6..31))
-        page.assertOpenedDaysAre(listOf(1, 5))
+        page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
 
         // Clicking an already opened day changes nothing.
         page.clickDay(1)
         page.clickBack()
-        page.assertUnopenedDaysAre((2..4) + (6..31))
-        page.assertOpenedDaysAre(listOf(1, 5))
+        page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
 
         // Restarting the server changes nothing.
         server.stop()
         server = startServer(clock = clock) { "whatever" }
         page.navigateHome(port = server.port())
-        page.assertUnopenedDaysAre((2..4) + (6..31))
-        page.assertOpenedDaysAre(listOf(1, 5))
+        page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
     }
 
     @Test
@@ -464,22 +460,22 @@ class EndToEndTests {
             val page1 = browser.newPage()
             page1.login(email = userEmail, googleSubjectId = googleSubjectId, authServer = authServer)
             page1.assertCurrentMonthIs(today.toYearMonth())
-            page1.assertOpenedDaysAre(emptyList())
+            page1.assertOpenedDaysAre(emptyList(), today.toYearMonth())
             page1.clickDay(1)
             page1.clickBack()
             page1.clickDay(14)
             page1.clickBack()
-            page1.assertOpenedDaysAre(listOf(1, 14))
+            page1.assertOpenedDaysAre(listOf(1, 14), today.toYearMonth())
 
             val page2 = browser.newPage()
             page2.login(email = userEmail, googleSubjectId = googleSubjectId, authServer = authServer)
             page2.assertCurrentMonthIs(today.toYearMonth())
-            page2.assertOpenedDaysAre(listOf(1, 14))
+            page2.assertOpenedDaysAre(listOf(1, 14), today.toYearMonth())
             page2.clickDay(3)
             page2.clickBack()
             page2.clickDay(25)
             page2.clickBack()
-            page2.assertOpenedDaysAre(listOf(1, 3, 14, 25))
+            page2.assertOpenedDaysAre(listOf(1, 3, 14, 25), today.toYearMonth())
         }
     }
 
@@ -496,26 +492,26 @@ class EndToEndTests {
             val page1 = browser.newPage()
             page1.login(email = userEmail1, authServer = authServer)
             page1.assertCurrentMonthIs(today.toYearMonth())
-            page1.assertOpenedDaysAre(emptyList())
+            page1.assertOpenedDaysAre(emptyList(), today.toYearMonth())
             page1.clickDay(1)
             page1.clickBack()
             page1.clickDay(14)
             page1.clickBack()
-            page1.assertOpenedDaysAre(listOf(1, 14))
+            page1.assertOpenedDaysAre(listOf(1, 14), today.toYearMonth())
 
             val page2 = browser.newPage()
             page2.login(email = userEmail2, authServer = authServer)
             page2.assertCurrentMonthIs(today.toYearMonth())
-            page2.assertOpenedDaysAre(emptyList())
+            page2.assertOpenedDaysAre(emptyList(), today.toYearMonth())
             page2.clickDay(3)
             page2.clickBack()
             page2.clickDay(25)
             page2.clickBack()
-            page2.assertOpenedDaysAre(listOf(3, 25))
+            page2.assertOpenedDaysAre(listOf(3, 25), today.toYearMonth())
 
             page1.clickDay(6)
             page1.clickBack()
-            page1.assertOpenedDaysAre(listOf(1, 6, 14))
+            page1.assertOpenedDaysAre(listOf(1, 6, 14), today.toYearMonth())
         }
     }
 
@@ -691,6 +687,375 @@ class EndToEndTests {
         assertEquals(0, page.evaluate("window.scrollY"))
     }
 
+    @Test
+    fun `users with permission can impersonate other users`() {
+        val clock = LocalDate.of(2024, 5, 31).toClock()
+        GoogleOAuthServer(clock = clock).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val allowedUserEmails = listOf(impersonatorEmail, otherUserEmail)
+            val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
+            server =
+                startServer(clock = clock, auth = auth, impersonatorEmails = listOf(impersonatorEmail)) { "whatever" }
+
+            val otherUserPage = browser.newPage()
+            otherUserPage.login(email = otherUserEmail, authServer = authServer)
+            otherUserPage.assertCurrentMonthIs(YearMonth.of(2024, 5))
+            otherUserPage.clickDay(1)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(1), YearMonth.of(2024, 5))
+            otherUserPage.clickPreviousMonth()
+            otherUserPage.assertCurrentMonthIs(YearMonth.of(2024, 4))
+            otherUserPage.clickDay(13)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(13), YearMonth.of(2024, 4))
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            impersonatorPage.assertCurrentMonthIs(YearMonth.of(2024, 5))
+            impersonatorPage.assertOpenedDaysAre(emptyList(), YearMonth.of(2024, 5))
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            assertThat(impersonatorPage.stopImpersonatingButton()).isVisible()
+            assertThat(impersonatorPage.impersonateEmailInput()).not().isVisible()
+            assertThat(impersonatorPage.impersonateButton()).not().isVisible()
+            impersonatorPage.assertCurrentMonthIs(YearMonth.of(2024, 5))
+            impersonatorPage.assertOpenedDaysAre(listOf(1), YearMonth.of(2024, 5))
+            impersonatorPage.clickPreviousMonth()
+            impersonatorPage.assertCurrentMonthIs(YearMonth.of(2024, 4))
+            impersonatorPage.assertOpenedDaysAre(listOf(13), YearMonth.of(2024, 4))
+        }
+    }
+
+    @Test
+    fun `opening unopened days while impersonating does not update anyone's opened days`() {
+        val month = YearMonth.of(2024, 5)
+        val clock = LocalDate.of(2024, 5, 31).toClock()
+        GoogleOAuthServer(clock = clock).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val allowedUserEmails = listOf(impersonatorEmail, otherUserEmail)
+            val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
+            server =
+                startServer(clock = clock, auth = auth, impersonatorEmails = listOf(impersonatorEmail)) { "whatever" }
+
+            val otherUserPage = browser.newPage()
+            otherUserPage.login(email = otherUserEmail, authServer = authServer)
+            otherUserPage.assertCurrentMonthIs(month)
+            otherUserPage.clickDay(1)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(1), month)
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            impersonatorPage.assertCurrentMonthIs(month)
+            impersonatorPage.clickDay(25)
+            impersonatorPage.clickBack()
+            impersonatorPage.assertOpenedDaysAre(listOf(25), month)
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            impersonatorPage.assertCurrentMonthIs(month)
+            impersonatorPage.assertOpenedDaysAre(listOf(1), month)
+
+            impersonatorPage.clickDay(20)
+            impersonatorPage.clickBack()
+            impersonatorPage.assertOpenedDaysAre(listOf(1), month)
+
+            otherUserPage.reload()
+            otherUserPage.assertCurrentMonthIs(month)
+            otherUserPage.assertOpenedDaysAre(listOf(1), month)
+            otherUserPage.clickDay(20)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(1, 20), month)
+
+            impersonatorPage.reload()
+            impersonatorPage.assertCurrentMonthIs(month)
+            impersonatorPage.assertOpenedDaysAre(listOf(1, 20), month)
+
+            impersonatorPage.stopImpersonating()
+            impersonatorPage.assertCurrentMonthIs(month)
+            impersonatorPage.assertOpenedDaysAre(listOf(25), month)
+
+            impersonatorPage.clickDay(5)
+            impersonatorPage.clickBack()
+            impersonatorPage.assertOpenedDaysAre(listOf(5, 25), month)
+            otherUserPage.reload()
+            otherUserPage.assertCurrentMonthIs(month)
+            otherUserPage.assertOpenedDaysAre(listOf(1, 20), month)
+        }
+    }
+
+    @Test
+    fun `previous days of impersonated user are displayed while impersonating`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val allowedUserEmails = listOf(impersonatorEmail, otherUserEmail)
+            val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
+            val dayTexts = List(30) { today.minusDays(it.toLong()) to UUID.randomUUID().toString() }.toMap()
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail),
+                    messageLoader = MapBackedMessageLoader(dayTexts),
+                )
+            val dateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
+
+            fun LocalDate.toPreviousDay(): PreviousDay =
+                PreviousDay(text = dayTexts[this]!!, date = format(dateTimeFormatter))
+
+            val openedDays = List(30) { today.minusDays(it.toLong()) }
+
+            val otherUserPage = browser.newPage()
+            otherUserPage.login(email = otherUserEmail, authServer = authServer)
+
+            DSL.using(dbUrl).use { ctx ->
+                val otherUser = UserRepository(ctx).getByEmail(otherUserEmail)!!
+                val daysRepository = DaysRepository(ctx, today.toClock())
+                openedDays.forEach { daysRepository.markDayAsOpened(otherUser, it) }
+            }
+
+            var expectedPreviousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
+            otherUserPage.reload()
+            otherUserPage.assertPreviousDaysAre(expectedPreviousDays)
+            otherUserPage.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
+            expectedPreviousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
+            otherUserPage.assertPreviousDaysAre(expectedPreviousDays)
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            impersonatorPage.assertPreviousDaysAre(emptyList())
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            expectedPreviousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
+            impersonatorPage.assertPreviousDaysAre(expectedPreviousDays)
+            impersonatorPage.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
+            expectedPreviousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
+            impersonatorPage.assertPreviousDaysAre(expectedPreviousDays)
+        }
+    }
+
+    @Test
+    fun `non-impersonators cannot impersonate`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorEmail1 = "admin@example.com"
+            val impersonatorEmail2 = "impersonator@gmail.com"
+            val otherUserEmail1 = "other@example.com"
+            val otherUserEmail2 = "someone@gmail.com"
+            val allowedUserEmails = listOf(impersonatorEmail1, impersonatorEmail2, otherUserEmail1, otherUserEmail2)
+            val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
+            val dayTexts = List(30) { today.minusDays(it.toLong()) to UUID.randomUUID().toString() }.toMap()
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail1, impersonatorEmail2),
+                    messageLoader = MapBackedMessageLoader(dayTexts),
+                )
+
+            val impersonator1Page = browser.newPage()
+            impersonator1Page.login(email = impersonatorEmail1, authServer = authServer)
+            assertThat(impersonator1Page.impersonateEmailInput()).isVisible()
+            assertThat(impersonator1Page.impersonateButton()).isVisible()
+            assertThat(impersonator1Page.stopImpersonatingButton()).not().isVisible()
+
+            val otherUser1Page = browser.newPage()
+            otherUser1Page.login(email = otherUserEmail1, authServer = authServer)
+            assertThat(otherUser1Page.impersonateEmailInput()).not().isVisible()
+            assertThat(otherUser1Page.impersonateButton()).not().isVisible()
+            assertThat(otherUser1Page.stopImpersonatingButton()).not().isVisible()
+
+            val impersonator2Page = browser.newPage()
+            impersonator2Page.login(email = impersonatorEmail2, authServer = authServer)
+            assertThat(impersonator2Page.impersonateEmailInput()).isVisible()
+            assertThat(impersonator2Page.impersonateButton()).isVisible()
+            assertThat(impersonator2Page.stopImpersonatingButton()).not().isVisible()
+
+            val otherUser2Page = browser.newPage()
+            otherUser2Page.login(email = otherUserEmail2, authServer = authServer)
+            assertThat(otherUser2Page.impersonateEmailInput()).not().isVisible()
+            assertThat(otherUser2Page.impersonateButton()).not().isVisible()
+            assertThat(otherUser2Page.stopImpersonatingButton()).not().isVisible()
+        }
+    }
+
+    @Test
+    fun `logging out also stop impersonating`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorSubjectId = UUID.randomUUID().toString()
+            val impersonatorEmail = "admin@example.com"
+            val otherUserSubjectId = UUID.randomUUID().toString()
+            val otherUserEmail = "other@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail))
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail),
+                ) { "whatever" }
+
+            val otherUserPage = browser.newPage()
+            otherUserPage.login(
+                email = otherUserEmail,
+                googleSubjectId = otherUserSubjectId,
+                authServer = authServer,
+            )
+            otherUserPage.assertCurrentMonthIs(today.toYearMonth())
+            otherUserPage.clickDay(20)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(20), today.toYearMonth())
+            assertThat(otherUserPage.previousDayTexts()).hasCount(1)
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.login(
+                email = impersonatorEmail,
+                googleSubjectId = impersonatorSubjectId,
+                authServer = authServer,
+            )
+            impersonatorPage.assertCurrentMonthIs(today.toYearMonth())
+            impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            impersonatorPage.assertCurrentMonthIs(today.toYearMonth())
+            impersonatorPage.assertOpenedDaysAre(listOf(20), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(1)
+
+            impersonatorPage.clickLogout()
+            impersonatorPage.assertIsOnAuthenticationPage(authServer)
+            impersonatorPage.login(
+                email = impersonatorEmail,
+                googleSubjectId = impersonatorSubjectId,
+                authServer = authServer,
+            )
+            impersonatorPage.assertCurrentMonthIs(today.toYearMonth())
+            impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+        }
+    }
+
+    @Test
+    fun `the user being impersonated is displayed`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail))
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail),
+                ) { "whatever" }
+
+            browser.newPage().login(email = otherUserEmail, authServer = authServer)
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            assertThat(impersonatorPage.impersonatingMessage()).isVisible()
+            assertThat(impersonatorPage.impersonatingMessage()).hasText("impersonating $otherUserEmail")
+
+            impersonatorPage.stopImpersonating()
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+        }
+    }
+
+    @Test
+    fun `impersonating a non-existent user shows an error`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail))
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail),
+                ) { "whatever" }
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.clock().install()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            assertThat(impersonatorPage.error()).not().isVisible()
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            assertThat(impersonatorPage.error()).isVisible()
+            val expectedError = "user $otherUserEmail not found"
+            assertThat(impersonatorPage.error()).hasText(expectedError)
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+            assertThat(impersonatorPage.stopImpersonatingButton()).not().isVisible()
+            assertThat(impersonatorPage.impersonateEmailInput()).isVisible()
+            assertThat(impersonatorPage.impersonateButton()).isVisible()
+
+            impersonatorPage.clock().fastForward(4500)
+            assertThat(impersonatorPage.error()).isVisible()
+            assertThat(impersonatorPage.error()).hasText(expectedError)
+
+            impersonatorPage.clock().fastForward(1000)
+            assertThat(impersonatorPage.error()).not().isVisible()
+
+            impersonatorPage.reload()
+            assertThat(impersonatorPage.error()).not().isVisible()
+        }
+    }
+
+    @Test
+    fun `impersonation is stopped when user ceases to exist while impersonating`() {
+        val today = LocalDate.of(2024, 5, 25)
+        GoogleOAuthServer(clock = today.toClock()).use { authServer ->
+            val impersonatorEmail = "admin@example.com"
+            val otherUserEmail = "other@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail))
+            server =
+                startServer(
+                    clock = today.toClock(),
+                    auth = auth,
+                    impersonatorEmails = listOf(impersonatorEmail),
+                ) { "whatever" }
+
+            val otherUserPage = browser.newPage()
+            otherUserPage.login(email = otherUserEmail, authServer = authServer)
+            otherUserPage.clickDay(1)
+            otherUserPage.clickBack()
+            otherUserPage.assertOpenedDaysAre(listOf(1), today.toYearMonth())
+            assertThat(otherUserPage.previousDayTexts()).hasCount(1)
+
+            val impersonatorPage = browser.newPage()
+            impersonatorPage.clock().install()
+            impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+            impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+
+            impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
+            assertThat(impersonatorPage.impersonatingMessage()).isVisible()
+            impersonatorPage.assertOpenedDaysAre(listOf(1), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(1)
+
+            executeStatement(dbUrl = dbUrl) { stmt ->
+                stmt.executeUpdate("DELETE FROM users WHERE email_address = '$otherUserEmail'")
+            }
+
+            impersonatorPage.clickPreviousMonth()
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+            impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+
+            impersonatorPage.reload()
+            assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
+            impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
+            assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+        }
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -723,6 +1088,7 @@ class EndToEndTests {
         clock: Clock = Clock.systemUTC(),
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         auth: AuthConfig = NoAuth,
+        impersonatorEmails: List<String> = emptyList(),
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -732,6 +1098,7 @@ class EndToEndTests {
             assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
+            impersonatorEmails = impersonatorEmails,
             messageLoader = messageLoader,
         ).startServer()
 }
@@ -759,19 +1126,19 @@ private fun Page.assertDaysAreDisabled(days: Iterable<Int>) {
     for (dayNum in days) assertThat(day(dayNum = dayNum)).isDisabled()
 }
 
-private fun Page.assertUnopenedDaysAre(days: Iterable<Int>) {
-    for (dayNum in days) {
+private fun Page.assertOpenedDaysAre(
+    days: Iterable<Int>,
+    month: YearMonth,
+) {
+    for (dayNum in (1..month.lengthOfMonth())) {
         val day = day(dayNum = dayNum)
-        assertThat(day).hasClass("day-ready")
-        assertThat(day).not().hasClass("day-opened")
-    }
-}
-
-private fun Page.assertOpenedDaysAre(days: Iterable<Int>) {
-    for (dayNum in days) {
-        val day = day(dayNum = dayNum)
-        assertThat(day).hasClass("day-opened")
-        assertThat(day).not().hasClass("day-ready")
+        if (dayNum in days) {
+            assertThat(day).hasClass("day-opened")
+            assertThat(day).not().hasClass("day-ready")
+        } else {
+            assertThat(day).hasClass("day-ready")
+            assertThat(day).not().hasClass("day-opened")
+        }
     }
 }
 
@@ -860,6 +1227,25 @@ private fun Page.clickLogout() {
     logoutButton().click()
 }
 
+private fun Page.impersonate(emailToImpersonate: String) {
+    assertThat(impersonateEmailInput()).isVisible()
+    impersonateEmailInput().fill(emailToImpersonate)
+    assertThat(stopImpersonatingButton()).not().isVisible()
+    assertThat(impersonateButton()).isVisible()
+    impersonateButton().click()
+}
+
+private fun Page.stopImpersonating() {
+    assertThat(stopImpersonatingButton()).isVisible()
+    assertThat(impersonateEmailInput()).not().isVisible()
+    assertThat(impersonateButton()).not().isVisible()
+    stopImpersonatingButton().click()
+    assertThat(stopImpersonatingButton()).not().isVisible()
+    assertThat(impersonateEmailInput()).isVisible()
+    assertThat(impersonateEmailInput()).hasValue("")
+    assertThat(impersonateButton()).isVisible()
+}
+
 private fun Page.calendar(): Locator = getByTestId("calendar")
 
 private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
@@ -883,3 +1269,13 @@ private fun Page.previousDayTexts(): Locator = getByTestId("previous-day-text")
 private fun Page.previousDayDate(): Locator = getByTestId("previous-day-date")
 
 private fun Page.backToTopButton(): Locator = getByTestId("back-to-top")
+
+private fun Page.impersonateButton(): Locator = getByTestId("impersonate")
+
+private fun Page.impersonateEmailInput(): Locator = getByTestId("impersonate-email")
+
+private fun Page.stopImpersonatingButton(): Locator = getByTestId("stop-impersonating")
+
+private fun Page.impersonatingMessage(): Locator = getByTestId("impersonating-message")
+
+private fun Page.error(): Locator = getByTestId("error")
