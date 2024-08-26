@@ -5,6 +5,7 @@ import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
+import org.http4k.base64Encode
 import org.http4k.core.Uri
 import org.http4k.core.findSingle
 import org.http4k.core.queries
@@ -1099,6 +1100,7 @@ class EndToEndTests {
             hotReloading = false,
             auth = auth,
             impersonatorEmails = impersonatorEmails,
+            tokenHashKeyBase64 = Random.nextBytes(32).base64Encode(),
             messageLoader = messageLoader,
         ).startServer()
 }

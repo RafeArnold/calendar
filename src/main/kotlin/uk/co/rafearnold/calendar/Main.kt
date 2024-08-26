@@ -25,6 +25,7 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config {
         hotReloading = env["HOT_RELOADING"] == "true",
         auth = AuthConfig.fromEnv(env),
         impersonatorEmails = env["IMPERSONATORS"]?.split(" ") ?: emptyList(),
+        tokenHashKeyBase64 = randomBytes(numBytes = 32).base64Encode(),
         messageLoader = AssetMessageLoader(assetLoader),
     )
 }
@@ -41,5 +42,4 @@ fun GoogleOauth.Companion.fromEnv(env: Map<String, String>): GoogleOauth =
         clientId = env.getValue("GOOGLE_OAUTH_CLIENT_ID"),
         clientSecret = env.getValue("GOOGLE_OAUTH_CLIENT_SECRET"),
         allowedUserEmails = env.getValue("ALLOWED_USERS").split(" "),
-        tokenHashKeyBase64 = randomBytes(numBytes = 32).base64Encode(),
     )

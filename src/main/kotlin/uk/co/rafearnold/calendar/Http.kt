@@ -1,6 +1,11 @@
 package uk.co.rafearnold.calendar
 
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.flywaydb.core.Flyway
+import org.http4k.base64DecodedArray
+import org.http4k.base64Encode
 import org.http4k.core.Body
 import org.http4k.core.ContentType
 import org.http4k.core.Filter
@@ -57,6 +62,7 @@ import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 data class Config(
@@ -67,6 +73,7 @@ data class Config(
     val hotReloading: Boolean,
     val auth: AuthConfig,
     val impersonatorEmails: List<String>,
+    val tokenHashKeyBase64: String,
     val messageLoader: MessageLoader,
 ) {
     companion object
@@ -77,6 +84,8 @@ interface AuthConfig {
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory
 
     fun logoutHandler(): HttpHandler
@@ -89,8 +98,14 @@ data object NoAuth : AuthConfig {
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
-        RoutingHandlerFactory { list -> routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } } }
+        RoutingHandlerFactory { list ->
+            routes(*list)
+                .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
+                .withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
+        }
 
     override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
 }
@@ -115,18 +130,23 @@ fun Config.startServer(): Http4kServer {
 
     val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository)
 
+    val tokenHashKey = tokenHashKeyBase64.base64DecodedArray()
+    val objectMapper = jacksonObjectMapper()
+    val impersonationTokens =
+        ImpersonationTokens(tokenHashKey = tokenHashKey, clock = clock, objectMapper = objectMapper)
+    val impersonatedFilter = impersonatedUserFilter(userRepository, userLens, impersonatedUserLens, impersonationTokens)
+
     val router =
         routes(
             Assets(assetLoader = assetLoader),
-            auth.createHandlerFactory(userRepository, userLens, clock)
+            auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey, listOf(impersonatedFilter))
                 .routes(
                     Index(view, clock, userLens, impersonatedUserLens, impersonatorEmails, calendarModelHelper),
                     DaysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
                     DayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                     previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
-                    impersonateRoute(view, userRepository, userLens, impersonatorEmails),
+                    impersonateRoute(view, clock, userRepository, userLens, impersonatorEmails, impersonationTokens),
                 )
-                .withFilter(impersonatedUserFilter(userRepository, impersonatedUserLens))
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
             logoutRoute(auth),
             stopImpersonatingRoute(),
@@ -194,6 +214,7 @@ class Index(
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
         val impersonatedUser0 = impersonatedUser(request)
         val user0 = user(request)
+        val errorCookie0 = errorCookie(request)
         val viewModel =
             HomeViewModel(
                 justCalendar = request.header("hx-request") != null,
@@ -205,10 +226,11 @@ class Index(
                 monthImageLink = monthImageLink(month),
                 canImpersonate = user0.email in impersonatorEmails,
                 impersonatingEmail = impersonatedUser0?.email,
-                error = errorCookie(request)?.value,
+                error = errorCookie0?.value,
                 calendarBaseModel = calendarModelHelper.create(month, impersonatedUser0 ?: user0),
             )
-        Response(OK).with(view of viewModel).invalidateCookie(ERROR_COOKIE_NAME)
+        Response(OK).with(view of viewModel)
+            .run { if (errorCookie0 != null) invalidateCookie(ERROR_COOKIE_NAME) else this }
     }
 
 class DaysRoute(
@@ -273,30 +295,40 @@ fun previousDaysRoute(
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }
 
-private const val IMPERSONATING_EMAIL_COOKIE_NAME = "impersonating_email"
-private val impersonatingEmailCookie = Cookies.optional(name = IMPERSONATING_EMAIL_COOKIE_NAME)
+private const val IMPERSONATION_TOKEN_COOKIE_NAME = "impersonation_token"
+private val impersonationTokenCookie = Cookies.optional(name = IMPERSONATION_TOKEN_COOKIE_NAME)
 
 private val emailToImpersonate = FormField.required("email")
 private val impersonateForm = Body.webForm(Validator.Strict, emailToImpersonate).toLens()
 
 fun impersonateRoute(
     view: BiDiBodyLens<ViewModel>,
+    clock: Clock,
     userRepository: UserRepository,
     user: RequestContextLens<User>,
     impersonatorEmails: List<String>,
+    tokens: ImpersonationTokens,
 ): RoutingHttpHandler =
     "/impersonate" bind POST to { request ->
-        if (user(request).email !in impersonatorEmails) throw ForbiddenException()
+        val impersonatorEmail = user(request).email
+        if (impersonatorEmail !in impersonatorEmails) throw ForbiddenException()
         val emailToImpersonate = emailToImpersonate(impersonateForm(request))
         val userToImpersonate = userRepository.getByEmail(email = emailToImpersonate)
         val error = if (userToImpersonate == null) "user $emailToImpersonate not found" else null
         if (error == null) {
+            val expirationTimeSeconds = clock.instant().plus(1, ChronoUnit.HOURS).epochSecond
+            val impersonationPayload =
+                ImpersonationPayload(
+                    impersonatorEmail = impersonatorEmail,
+                    impersonatedEmail = emailToImpersonate,
+                    expirationTimeSeconds = expirationTimeSeconds,
+                )
             Response(OK)
                 .header("hx-redirect", "/")
                 .cookie(
                     Cookie(
-                        name = IMPERSONATING_EMAIL_COOKIE_NAME,
-                        value = emailToImpersonate,
+                        name = IMPERSONATION_TOKEN_COOKIE_NAME,
+                        value = tokens.sign(impersonationPayload),
                         path = "/",
                         secure = true,
                         httpOnly = true,
@@ -313,7 +345,7 @@ fun impersonateRoute(
     }
 
 val stopImpersonating: (Response) -> Response = {
-    it.replaceCookie(Cookie(IMPERSONATING_EMAIL_COOKIE_NAME, "", path = "/").invalidate())
+    it.replaceCookie(Cookie(IMPERSONATION_TOKEN_COOKIE_NAME, "", path = "/").invalidate())
 }
 
 fun stopImpersonatingRoute(): RoutingHttpHandler =
@@ -321,16 +353,29 @@ fun stopImpersonatingRoute(): RoutingHttpHandler =
 
 fun impersonatedUserFilter(
     userRepository: UserRepository,
+    user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
+    tokens: ImpersonationTokens,
 ): Filter =
     Filter { next ->
         { request ->
-            val impersonatingEmail = impersonatingEmailCookie(request)
-            if (impersonatingEmail != null) {
-                val impersonatedUser0 = userRepository.getByEmail(email = impersonatingEmail.value)
-                if (impersonatedUser0 != null) {
+            val impersonationCookie = impersonationTokenCookie(request)
+            if (impersonationCookie != null) {
+                try {
+                    val token =
+                        runCatching { tokens.parse(impersonationCookie.value) }
+                            .getOrElse { throw InvalidImpersonationTokenException() }
+                    val tokenIsValid =
+                        runCatching { tokens.verify(token, impersonatorEmail = user(request).email) }
+                            .getOrElse { throw InvalidImpersonationTokenException() }
+                    if (!tokenIsValid) {
+                        throw InvalidImpersonationTokenException()
+                    }
+                    val impersonatedUser0 =
+                        userRepository.getByEmail(email = token.payload.impersonatedEmail)
+                            ?: throw InvalidImpersonationTokenException()
                     next(impersonatedUser(impersonatedUser0, request))
-                } else {
+                } catch (e: InvalidImpersonationTokenException) {
                     Response(OK).header("hx-redirect", "/").with(stopImpersonating)
                 }
             } else {
@@ -338,6 +383,58 @@ fun impersonatedUserFilter(
             }
         }
     }
+
+class InvalidImpersonationTokenException : RuntimeException()
+
+data class ImpersonationToken(
+    val payload: ImpersonationPayload,
+    val encodedSignature: String,
+    val encodedPayload: String,
+)
+
+data class ImpersonationPayload(
+    @JsonProperty(value = "impersonator", required = true)
+    val impersonatorEmail: String,
+    @JsonProperty(value = "impersonated", required = true)
+    val impersonatedEmail: String,
+    @JsonProperty(value = "exp", required = true)
+    val expirationTimeSeconds: Long,
+)
+
+class ImpersonationTokens(
+    private val tokenHashKey: ByteArray,
+    private val clock: Clock,
+    private val objectMapper: ObjectMapper,
+) {
+    fun sign(payload: ImpersonationPayload): String {
+        val encodedPayload = objectMapper.writeValueAsString(payload).base64Encode()
+        val encodedSignature = hmacSha256(encodedPayload.toByteArray(), tokenHashKey).base64Encode()
+        return "$encodedPayload.$encodedSignature"
+    }
+
+    fun parse(token: String): ImpersonationToken {
+        val parts = token.split(".")
+        if (parts.size != 2) throw IllegalArgumentException()
+        val (encodedPayload, encodedSignature) = parts
+        val payload = objectMapper.readValue(encodedPayload.base64DecodedArray(), ImpersonationPayload::class.java)
+        return ImpersonationToken(
+            payload = payload,
+            encodedSignature = encodedSignature,
+            encodedPayload = encodedPayload,
+        )
+    }
+
+    fun verify(
+        token: ImpersonationToken,
+        impersonatorEmail: String,
+    ): Boolean = token.payload.impersonatorEmail == impersonatorEmail && !token.isExpired() && token.verifySignature()
+
+    private fun ImpersonationToken.isExpired(): Boolean = payload.expirationTimeSeconds < clock.millis() / 1000
+
+    private fun ImpersonationToken.verifySignature(): Boolean =
+        encodedSignature.base64DecodedArray()
+            .contentEquals(hmacSha256(data = encodedPayload.toByteArray(), key = tokenHashKey))
+}
 
 class CalendarModelHelper(
     private val messageLoader: MessageLoader,

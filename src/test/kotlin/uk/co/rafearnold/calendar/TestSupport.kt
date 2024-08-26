@@ -13,7 +13,6 @@ import org.bouncycastle.cert.X509v3CertificateBuilder
 import org.bouncycastle.openssl.MiscPEMGenerator
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.bouncycastle.util.io.pem.PemWriter
-import org.http4k.base64Encode
 import org.http4k.core.toUrlFormEncoded
 import org.http4k.server.Http4kServer
 import org.intellij.lang.annotations.Language
@@ -31,6 +30,7 @@ import java.sql.Statement
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
@@ -48,6 +48,8 @@ fun LocalDate.toMutableClock(): MutableClock = toClock().mutable()
 fun YearMonth.toClock(): Clock = atDay(Random.nextInt(1, lengthOfMonth())).toClock()
 
 fun LocalDate.toClock(): Clock = Clock.fixed(atTime(LocalTime.MIDNIGHT).toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
+
+fun LocalDateTime.toClock(): Clock = Clock.fixed(toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
 
 fun Clock.mutable() = MutableClock(this)
 
@@ -107,10 +109,7 @@ class GoogleOAuthServer(
 
     val authenticationPageUrl: String = baseUrl() + AUTHENTICATION_PAGE_PATH
 
-    fun toAuthConfig(
-        allowedUserEmails: Collection<String>,
-        tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
-    ): GoogleOauth =
+    fun toAuthConfig(allowedUserEmails: Collection<String>): GoogleOauth =
         GoogleOauth(
             serverBaseUrl = null,
             authServerUrl = URI(authenticationPageUrl),
@@ -119,7 +118,6 @@ class GoogleOAuthServer(
             clientId = clientId,
             clientSecret = clientSecret,
             allowedUserEmails = allowedUserEmails,
-            tokenHashKeyBase64 = tokenHashKey.base64Encode(),
         )
 
     fun stubTokenExchange(

@@ -37,12 +37,13 @@ data class GoogleOauth(
     val clientId: String,
     val clientSecret: String,
     val allowedUserEmails: Collection<String>,
-    val tokenHashKeyBase64: String,
 ) : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list ->
             val oauth =
@@ -53,13 +54,15 @@ data class GoogleOauth(
                     publicCertsUrl = publicCertsUrl,
                     clientId = clientId,
                     clientSecret = clientSecret,
-                    tokenHashKey = tokenHashKeyBase64.base64DecodedArray(),
+                    tokenHashKey = tokenHashKey,
                     clock = clock,
                     allowedUserEmails = allowedUserEmails,
                 )
             routes(
                 GoogleOAuthCallback(oauth, userRepository),
-                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+                routes(*list)
+                    .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
+                    .withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
             )
         }
 
