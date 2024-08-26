@@ -483,11 +483,11 @@ class HttpTests {
             // Incorrect audience.
             assertRequestReturnsRedirect(idToken = idToken(audience = UUID.randomUUID().toString()))
             // Unrecognised subject.
-            assertRequestIsForbidden(idToken = idToken(subject = UUID.randomUUID().toString()))
+            assertRequestReturnsRedirect(idToken = idToken(subject = UUID.randomUUID().toString()))
             // Unrecognised email.
-            assertRequestIsForbidden(idToken = idToken(email = "whoami@example.com"))
+            assertRequestReturnsRedirect(idToken = idToken(email = "whoami@example.com"))
             // Disallowed email.
-            assertRequestIsForbidden(idToken = idToken(subject = otherUserGoogleSubjectId, email = otherUserEmail))
+            assertRequestReturnsRedirect(idToken = idToken(subject = otherUserGoogleSubjectId, email = otherUserEmail))
             // Valid ID token.
             assertRequestSucceeds(idToken = idToken())
         }

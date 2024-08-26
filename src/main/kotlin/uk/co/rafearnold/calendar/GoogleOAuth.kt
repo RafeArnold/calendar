@@ -91,17 +91,21 @@ private class AuthenticateViaGoogle(
                     runCatching { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
                         .getOrElse { throw ForbiddenException() }
                 }
-            if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
-                val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
-                if (user != null &&
-                    idToken.payload.email == user.email &&
-                    oauth.emailIsAllowed(email = idToken.payload.email)
-                ) {
-                    next(user(user, request))
+            try {
+                if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
+                    val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
+                    if (user != null &&
+                        idToken.payload.email == user.email &&
+                        oauth.emailIsAllowed(email = idToken.payload.email)
+                    ) {
+                        next(user(user, request))
+                    } else {
+                        throw InvalidIdTokenException()
+                    }
                 } else {
-                    throw ForbiddenException()
+                    throw InvalidIdTokenException()
                 }
-            } else {
+            } catch (e: InvalidIdTokenException) {
                 val csrfToken = randomBytes(numBytes = 32)
                 val tokenHash = oauth.hashToken(token = csrfToken)
                 val authUrl =
@@ -124,6 +128,8 @@ private class AuthenticateViaGoogle(
             }
         }
 }
+
+private class InvalidIdTokenException : RuntimeException()
 
 private val codeQuery = Query.optional("code")
 private val stateQuery = Query.optional("state")
