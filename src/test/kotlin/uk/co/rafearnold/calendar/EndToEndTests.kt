@@ -686,7 +686,7 @@ class EndToEndTests {
 
         page.backToTopButton().click()
 
-        assertEquals(0, page.evaluate("window.scrollY"))
+        page.waitForFunction("window.scrollY === 0")
     }
 
     @Test
@@ -1078,6 +1078,38 @@ class EndToEndTests {
             page.clickNextMonth()
             page.assertIsOnAuthenticationPage(authServer)
         }
+    }
+
+    @Test
+    fun `clicking days with missing messages don't affected opened days`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val messageLoader = MapBackedMessageLoader(mapOf(now to "test 1", now.minusDays(2) to "test 2"))
+        server = startServer(clock = now.toClock(), messageLoader = messageLoader)
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port(), now.toYearMonth())
+        page.assertCurrentMonthIs(now.toYearMonth())
+        page.clickDay(24)
+        page.assertThatDayTextIs("test 1")
+        page.clickBack()
+        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
+
+        page.day(23).click()
+        assertThat(page.dayText()).not().isVisible()
+        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
+        page.reload()
+        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
+
+        page.clickDay(22)
+        page.assertThatDayTextIs("test 2")
+        page.clickBack()
+        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
+
+        page.day(21).click()
+        assertThat(page.dayText()).not().isVisible()
+        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
+        page.reload()
+        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
     }
 
     private fun Page.login(
