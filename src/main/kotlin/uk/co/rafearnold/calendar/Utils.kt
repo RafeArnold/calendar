@@ -3,8 +3,18 @@ package uk.co.rafearnold.calendar
 import org.http4k.core.Request
 import org.http4k.core.Response
 import java.security.SecureRandom
+import java.time.Clock
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.YearMonth
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+
+fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
+
+fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
+
+fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private val random = SecureRandom()
 

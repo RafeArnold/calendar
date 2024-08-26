@@ -46,7 +46,6 @@ import org.sqlite.SQLiteDataSource
 import java.net.URL
 import java.time.Clock
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -310,12 +309,6 @@ fun List<LocalDate>.toPreviousDayModels(messageLoader: MessageLoader) =
 
 fun logoutRoute(auth: AuthConfig): RoutingHttpHandler =
     "/logout" bind GET to { auth.logoutHandler()(it).with(stopImpersonating) }
-
-fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
-
-fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
-
-fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
 
