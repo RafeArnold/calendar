@@ -244,9 +244,9 @@ fun dayRoute(
     "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
-        if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
         val message = messageLoader[date]
         if (message != null) {
+            if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
             val month = date.toYearMonth()
             val viewModel =
                 DayViewModel(
