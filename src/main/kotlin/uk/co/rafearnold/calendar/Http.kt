@@ -1,6 +1,8 @@
 package uk.co.rafearnold.calendar
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.flywaydb.core.Flyway
+import org.http4k.base64DecodedArray
 import org.http4k.core.Body
 import org.http4k.core.ContentType
 import org.http4k.core.Filter
@@ -15,10 +17,12 @@ import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Store
+import org.http4k.core.cookie.invalidateCookie
 import org.http4k.core.then
 import org.http4k.core.with
 import org.http4k.filter.ServerFilters
 import org.http4k.lens.BiDiBodyLens
+import org.http4k.lens.Cookies
 import org.http4k.lens.Path
 import org.http4k.lens.Query
 import org.http4k.lens.RequestContextKey
@@ -42,7 +46,6 @@ import org.sqlite.SQLiteDataSource
 import java.net.URL
 import java.time.Clock
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -52,9 +55,11 @@ data class Config(
     val port: Int,
     val clock: Clock,
     val dbUrl: String,
-    val assetDirs: List<String>,
+    val assetLoader: ResourceLoader,
     val hotReloading: Boolean,
     val auth: AuthConfig,
+    val impersonatorEmails: List<String>,
+    val tokenHashKeyBase64: String,
     val messageLoader: MessageLoader,
 ) {
     companion object
@@ -65,6 +70,8 @@ interface AuthConfig {
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory
 
     fun logoutHandler(): HttpHandler
@@ -77,8 +84,14 @@ data object NoAuth : AuthConfig {
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
-        RoutingHandlerFactory { list -> routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } } }
+        RoutingHandlerFactory { list ->
+            routes(*list)
+                .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
+                .withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
+        }
 
     override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
 }
@@ -99,21 +112,30 @@ fun Config.startServer(): Http4kServer {
 
     val requestContexts = RequestContexts()
     val userLens = userLens(requestContexts)
+    val impersonatedUserLens = impersonatedUserLens(requestContexts)
 
     val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository)
 
+    val tokenHashKey = tokenHashKeyBase64.base64DecodedArray()
+    val objectMapper = jacksonObjectMapper()
+    val impersonationTokens =
+        ImpersonationTokens(tokenHashKey = tokenHashKey, clock = clock, objectMapper = objectMapper)
+    val impersonatedFilter = impersonatedUserFilter(userRepository, userLens, impersonatedUserLens, impersonationTokens)
+
     val router =
         routes(
-            Assets(assetDirs = assetDirs),
-            auth.createHandlerFactory(userRepository, userLens, clock)
+            assetsRoute(assetLoader = assetLoader),
+            auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey, listOf(impersonatedFilter))
                 .routes(
-                    Index(view, clock, userLens, calendarModelHelper),
-                    DaysRoute(view, clock, userLens, calendarModelHelper),
-                    DayRoute(view, messageLoader, clock, daysRepository, userLens),
-                    previousDaysRoute(view, messageLoader, clock, daysRepository, userLens),
+                    indexRoute(view, clock, userLens, impersonatedUserLens, impersonatorEmails, calendarModelHelper),
+                    daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                    dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
+                    previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
+                    impersonateRoute(view, clock, userRepository, userLens, impersonatorEmails, impersonationTokens),
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
             logoutRoute(auth),
+            stopImpersonatingRoute(),
         ).withFilter(forbiddenFilter)
     val app =
         Filter { next ->
@@ -140,11 +162,13 @@ fun interface MessageLoader {
     operator fun get(date: LocalDate): String?
 }
 
-class Assets(
-    assetDirs: List<String>,
-) : RoutingHttpHandler by
-    static(ChainResourceLoader(assetDirs.map { ResourceLoader.Directory(it) } + ResourceLoader.Classpath("/assets")))
-        .withBasePath("/assets")
+class AssetMessageLoader(private val resourceLoader: ResourceLoader) : MessageLoader {
+    override fun get(date: LocalDate): String? =
+        resourceLoader.load("messages/" + date.format(DateTimeFormatter.ISO_LOCAL_DATE))
+            ?.openStream()?.readAllBytes()?.decodeToString()
+}
+
+fun assetsRoute(assetLoader: ResourceLoader): RoutingHttpHandler = static(assetLoader).withBasePath("/assets")
 
 class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceLoader {
     override fun load(path: String): URL? {
@@ -152,6 +176,9 @@ class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceL
         return null
     }
 }
+
+const val ERROR_COOKIE_NAME: String = "error"
+private val errorCookie = Cookies.optional(ERROR_COOKIE_NAME)
 
 private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
     RequestContextKey.required(contexts, name = "user")
@@ -162,47 +189,62 @@ val monthQuery = Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optiona
 
 val previousDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
 
-class Index(
+fun indexRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     user: RequestContextLens<User>,
+    impersonatedUser: RequestContextLens<User?>,
+    impersonatorEmails: List<String>,
     calendarModelHelper: CalendarModelHelper,
-) : RoutingHttpHandler by "/" bind GET to { request ->
+): RoutingHttpHandler =
+    "/" bind GET to { request ->
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
+        val impersonatedUser0 = impersonatedUser(request)
+        val user0 = user(request)
+        val errorCookie0 = errorCookie(request)
         val viewModel =
             HomeViewModel(
-                justCalendar = request.header("hx-request") != null,
+                justCalendar = request.isHtmx(),
                 previousMonthLink = monthLink(month.minusMonths(1)),
                 nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = month.year,
                 monthImageLink = monthImageLink(month),
-                calendarBaseModel = calendarModelHelper.create(month, user(request)),
+                canImpersonate = user0.email in impersonatorEmails,
+                impersonatingEmail = impersonatedUser0?.email,
+                error = errorCookie0?.value,
+                calendarBaseModel = calendarModelHelper.create(month, impersonatedUser0 ?: user0),
             )
         Response(OK).with(view of viewModel)
+            .run { if (errorCookie0 != null) invalidateCookie(ERROR_COOKIE_NAME) else this }
     }
 
-class DaysRoute(
+fun daysRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     user: RequestContextLens<User>,
+    impersonatedUser: RequestContextLens<User?>,
     calendarModelHelper: CalendarModelHelper,
-) : RoutingHttpHandler by "/days" bind GET to { request ->
+): RoutingHttpHandler =
+    "/days" bind GET to { request ->
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
-        Response(OK).with(view of DaysViewModel(calendarModelHelper.create(month, user(request))))
+        val user0 = impersonatedUser(request) ?: user(request)
+        Response(OK).with(view of DaysViewModel(calendarModelHelper.create(month, user0)))
     }
 
-class DayRoute(
+fun dayRoute(
     view: BiDiBodyLens<ViewModel>,
     messageLoader: MessageLoader,
     clock: Clock,
     daysRepo: DaysRepository,
     user: RequestContextLens<User>,
-) : RoutingHttpHandler by "/day/{date}" bind GET to {
+    impersonatedUser: RequestContextLens<User?>,
+): RoutingHttpHandler =
+    "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
-        daysRepo.markDayAsOpened(user(it), date)
+        if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
         val message = messageLoader[date]
         if (message != null) {
             val month = date.toYearMonth()
@@ -226,10 +268,12 @@ fun previousDaysRoute(
     clock: Clock,
     daysRepo: DaysRepository,
     user: RequestContextLens<User>,
+    impersonatedUser: RequestContextLens<User?>,
 ): RoutingHttpHandler =
     "/previous-days" bind GET to { request ->
         val from = previousDaysFromQuery(request) ?: clock.toDate()
-        val previousDays = daysRepo.getOpenedDaysDescFrom(user(request), from = from, limit = 10)
+        val previousDays =
+            daysRepo.getOpenedDaysDescFrom(impersonatedUser(request) ?: user(request), from = from, limit = 10)
         val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
         val previousDaysBaseModel =
             object : PreviousDaysBaseModel {
@@ -239,6 +283,9 @@ fun previousDaysRoute(
             }
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }
+
+fun logoutRoute(auth: AuthConfig): RoutingHttpHandler =
+    "/logout" bind GET to { auth.logoutHandler()(it).with(stopImpersonating) }
 
 class CalendarModelHelper(
     private val messageLoader: MessageLoader,
@@ -265,14 +312,6 @@ fun List<LocalDate>.toPreviousDayModels(messageLoader: MessageLoader) =
     mapNotNull { prevDate ->
         messageLoader[prevDate]?.let { PreviousDayModel(date = prevDate.format(previousDateFormatter), text = it) }
     }
-
-fun logoutRoute(auth: AuthConfig): RoutingHttpHandler = "/logout" bind GET to auth.logoutHandler()
-
-fun Clock.toDate(): LocalDate = LocalDate.ofInstant(instant(), zone)
-
-fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
-
-fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
 

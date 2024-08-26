@@ -19,6 +19,7 @@ import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.cookie.cookie
 import org.http4k.core.cookie.invalidateCookie
+import org.http4k.core.with
 import org.http4k.lens.Cookies
 import org.http4k.lens.Header
 import org.http4k.lens.Query
@@ -37,12 +38,13 @@ data class GoogleOauth(
     val clientId: String,
     val clientSecret: String,
     val allowedUserEmails: Collection<String>,
-    val tokenHashKeyBase64: String,
 ) : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
         userLens: RequestContextLens<User>,
         clock: Clock,
+        tokenHashKey: ByteArray,
+        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list ->
             val oauth =
@@ -53,13 +55,15 @@ data class GoogleOauth(
                     publicCertsUrl = publicCertsUrl,
                     clientId = clientId,
                     clientSecret = clientSecret,
-                    tokenHashKey = tokenHashKeyBase64.base64DecodedArray(),
+                    tokenHashKey = tokenHashKey,
                     clock = clock,
                     allowedUserEmails = allowedUserEmails,
                 )
             routes(
                 GoogleOAuthCallback(oauth, userRepository),
-                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+                routes(*list)
+                    .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
+                    .withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
             )
         }
 
@@ -88,17 +92,21 @@ private class AuthenticateViaGoogle(
                     runCatching { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
                         .getOrElse { throw ForbiddenException() }
                 }
-            if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
-                val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
-                if (user != null &&
-                    idToken.payload.email == user.email &&
-                    oauth.emailIsAllowed(email = idToken.payload.email)
-                ) {
-                    next(user(user, request))
+            try {
+                if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
+                    val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
+                    if (user != null &&
+                        idToken.payload.email == user.email &&
+                        oauth.emailIsAllowed(email = idToken.payload.email)
+                    ) {
+                        next(user(user, request))
+                    } else {
+                        throw InvalidIdTokenException()
+                    }
                 } else {
-                    throw ForbiddenException()
+                    throw InvalidIdTokenException()
                 }
-            } else {
+            } catch (e: InvalidIdTokenException) {
                 val csrfToken = randomBytes(numBytes = 32)
                 val tokenHash = oauth.hashToken(token = csrfToken)
                 val authUrl =
@@ -106,7 +114,11 @@ private class AuthenticateViaGoogle(
                         .setRedirectUri(oauth.redirectUri(request))
                         .setState(tokenHash.base64Encode())
                         .build()
-                Response(Status.FOUND).header("location", authUrl)
+                if (request.isHtmx()) {
+                    Response(Status.OK).with(htmxRedirect(location = authUrl))
+                } else {
+                    Response(Status.FOUND).header("location", authUrl)
+                }
                     .cookie(
                         Cookie(
                             name = AUTH_CSRF_TOKEN_COOKIE_NAME,
@@ -121,6 +133,8 @@ private class AuthenticateViaGoogle(
             }
         }
 }
+
+private class InvalidIdTokenException : RuntimeException()
 
 private val codeQuery = Query.optional("code")
 private val stateQuery = Query.optional("state")

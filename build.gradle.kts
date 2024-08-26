@@ -52,6 +52,8 @@ dependencies {
 
     implementation("com.google.api-client:google-api-client:2.6.0")
 
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
+
     implementation("ch.qos.logback:logback-classic:1.5.7")
 
     testImplementation(kotlin("test"))

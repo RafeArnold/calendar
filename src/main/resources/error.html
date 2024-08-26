@@ -1,0 +1,14 @@
+<div id="error" data-testid="error" class="fixed z-50 w-full flex justify-center duration-500 ease-in-out {% if model.error != null %}bottom-16{% else %}-bottom-16 invisible{% endif %}">
+    <div class="px-4 py-1 bg-white text-red-500 rounded-2xl text-center drop-shadow">
+        {% if model.error != null %}
+        {{ model.error }}
+        <script>
+            setTimeout(() => {
+                const errorClasses = document.getElementById("error").classList
+                errorClasses.replace("bottom-16", "-bottom-16")
+                errorClasses.add("invisible")
+            }, 5000)
+        </script>
+        {% endif %}
+    </div>
+</div>

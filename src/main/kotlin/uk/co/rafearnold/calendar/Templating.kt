@@ -50,6 +50,9 @@ class HomeViewModel(
     val month: String,
     val year: Int,
     val monthImageLink: String,
+    val canImpersonate: Boolean,
+    val impersonatingEmail: String?,
+    val error: String?,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     override fun template(): String = if (justCalendar) "calendar" else "home"
@@ -75,6 +78,11 @@ class PreviousDaysViewModel(
     previousDaysBaseModel: PreviousDaysBaseModel,
 ) : ViewModel, PreviousDaysBaseModel by previousDaysBaseModel {
     override fun template(): String = "previous-days"
+}
+
+@Suppress("unused")
+class ErrorViewModel(val error: String) : ViewModel {
+    override fun template(): String = "error"
 }
 
 interface CalendarBaseModel : PreviousDaysBaseModel {
