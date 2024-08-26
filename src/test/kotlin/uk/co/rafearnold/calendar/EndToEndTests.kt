@@ -686,7 +686,7 @@ class EndToEndTests {
 
         page.backToTopButton().click()
 
-        assertEquals(0, page.evaluate("window.scrollY"))
+        page.waitForFunction("window.scrollY === 0")
     }
 
     @Test
