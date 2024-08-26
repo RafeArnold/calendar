@@ -124,12 +124,12 @@ fun Config.startServer(): Http4kServer {
 
     val router =
         routes(
-            Assets(assetLoader = assetLoader),
+            assetsRoute(assetLoader = assetLoader),
             auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey, listOf(impersonatedFilter))
                 .routes(
-                    Index(view, clock, userLens, impersonatedUserLens, impersonatorEmails, calendarModelHelper),
-                    DaysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
-                    DayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
+                    indexRoute(view, clock, userLens, impersonatedUserLens, impersonatorEmails, calendarModelHelper),
+                    daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                    dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                     previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                     impersonateRoute(view, clock, userRepository, userLens, impersonatorEmails, impersonationTokens),
                 )
@@ -168,7 +168,7 @@ class AssetMessageLoader(private val resourceLoader: ResourceLoader) : MessageLo
             ?.openStream()?.readAllBytes()?.decodeToString()
 }
 
-class Assets(assetLoader: ResourceLoader) : RoutingHttpHandler by static(assetLoader).withBasePath("/assets")
+fun assetsRoute(assetLoader: ResourceLoader): RoutingHttpHandler = static(assetLoader).withBasePath("/assets")
 
 class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceLoader {
     override fun load(path: String): URL? {
@@ -189,14 +189,15 @@ val monthQuery = Query.map(StringBiDiMappings.yearMonth(monthFormatter)).optiona
 
 val previousDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
 
-class Index(
+fun indexRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
     impersonatorEmails: List<String>,
     calendarModelHelper: CalendarModelHelper,
-) : RoutingHttpHandler by "/" bind GET to { request ->
+): RoutingHttpHandler =
+    "/" bind GET to { request ->
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
         val impersonatedUser0 = impersonatedUser(request)
         val user0 = user(request)
@@ -219,26 +220,28 @@ class Index(
             .run { if (errorCookie0 != null) invalidateCookie(ERROR_COOKIE_NAME) else this }
     }
 
-class DaysRoute(
+fun daysRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
     calendarModelHelper: CalendarModelHelper,
-) : RoutingHttpHandler by "/days" bind GET to { request ->
+): RoutingHttpHandler =
+    "/days" bind GET to { request ->
         val month = monthQuery(request) ?: clock.toDate().toYearMonth()
         val user0 = impersonatedUser(request) ?: user(request)
         Response(OK).with(view of DaysViewModel(calendarModelHelper.create(month, user0)))
     }
 
-class DayRoute(
+fun dayRoute(
     view: BiDiBodyLens<ViewModel>,
     messageLoader: MessageLoader,
     clock: Clock,
     daysRepo: DaysRepository,
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
-) : RoutingHttpHandler by "/day/{date}" bind GET to {
+): RoutingHttpHandler =
+    "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
         if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
