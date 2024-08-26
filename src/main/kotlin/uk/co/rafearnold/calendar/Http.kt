@@ -281,6 +281,9 @@ fun previousDaysRoute(
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }
 
+fun logoutRoute(auth: AuthConfig): RoutingHttpHandler =
+    "/logout" bind GET to { auth.logoutHandler()(it).with(stopImpersonating) }
+
 class CalendarModelHelper(
     private val messageLoader: MessageLoader,
     private val clock: Clock,
@@ -306,9 +309,6 @@ fun List<LocalDate>.toPreviousDayModels(messageLoader: MessageLoader) =
     mapNotNull { prevDate ->
         messageLoader[prevDate]?.let { PreviousDayModel(date = prevDate.format(previousDateFormatter), text = it) }
     }
-
-fun logoutRoute(auth: AuthConfig): RoutingHttpHandler =
-    "/logout" bind GET to { auth.logoutHandler()(it).with(stopImpersonating) }
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)
 
