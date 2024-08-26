@@ -43,6 +43,10 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.io.path.Path
 import kotlin.random.Random
 
+fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
+
+fun LocalDateTime.toYearMonth(): YearMonth = YearMonth.from(this)
+
 fun LocalDate.toMutableClock(): MutableClock = toClock().mutable()
 
 fun YearMonth.toClock(): Clock = atDay(Random.nextInt(1, lengthOfMonth())).toClock()

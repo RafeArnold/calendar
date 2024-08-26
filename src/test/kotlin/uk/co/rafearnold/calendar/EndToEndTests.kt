@@ -22,6 +22,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -1054,6 +1055,28 @@ class EndToEndTests {
             assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
             impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
             assertThat(impersonatorPage.previousDayTexts()).hasCount(0)
+        }
+    }
+
+    @Test
+    fun `user is redirected when id token becomes invalid while using the calendar`() {
+        val now = LocalDateTime.of(2024, 8, 26, 15, 25, 30)
+        val clock = now.toClock().mutable()
+        GoogleOAuthServer(clock = clock).use { authServer ->
+            val userEmail = "test@gmail.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
+            server = startServer(clock = clock, auth = auth) { "whatever" }
+
+            val page = browser.newPage()
+            page.login(email = userEmail, authServer = authServer)
+            page.assertCurrentMonthIs(now.toYearMonth())
+            page.clickPreviousMonth()
+            page.assertCurrentMonthIs(now.minusMonths(1).toYearMonth())
+
+            clock.del = now.plusHours(2).toClock()
+
+            page.clickNextMonth()
+            page.assertIsOnAuthenticationPage(authServer)
         }
     }
 

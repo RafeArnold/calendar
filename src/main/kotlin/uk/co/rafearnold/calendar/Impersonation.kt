@@ -63,7 +63,7 @@ fun impersonateRoute(
                     expirationTimeSeconds = expirationTimeSeconds,
                 )
             Response(OK)
-                .header("hx-redirect", "/")
+                .with(htmxRedirect(location = "/"))
                 .cookie(
                     Cookie(
                         name = IMPERSONATION_TOKEN_COOKIE_NAME,
@@ -115,7 +115,7 @@ fun impersonatedUserFilter(
                             ?: throw InvalidImpersonationTokenException()
                     next(impersonatedUser(impersonatedUser0, request))
                 } catch (e: InvalidImpersonationTokenException) {
-                    Response(OK).header("hx-redirect", "/").with(stopImpersonating)
+                    Response(OK).with(htmxRedirect(location = "/")).with(stopImpersonating)
                 }
             } else {
                 next(request)

@@ -204,7 +204,7 @@ class Index(
         val errorCookie0 = errorCookie(request)
         val viewModel =
             HomeViewModel(
-                justCalendar = request.header("hx-request") != null,
+                justCalendar = request.isHtmx(),
                 previousMonthLink = monthLink(month.minusMonths(1)),
                 nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",

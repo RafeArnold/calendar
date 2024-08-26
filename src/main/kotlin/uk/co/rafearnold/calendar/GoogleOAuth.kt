@@ -19,6 +19,7 @@ import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.cookie.cookie
 import org.http4k.core.cookie.invalidateCookie
+import org.http4k.core.with
 import org.http4k.lens.Cookies
 import org.http4k.lens.Header
 import org.http4k.lens.Query
@@ -113,7 +114,11 @@ private class AuthenticateViaGoogle(
                         .setRedirectUri(oauth.redirectUri(request))
                         .setState(tokenHash.base64Encode())
                         .build()
-                Response(Status.FOUND).header("location", authUrl)
+                if (request.isHtmx()) {
+                    Response(Status.OK).with(htmxRedirect(location = authUrl))
+                } else {
+                    Response(Status.FOUND).header("location", authUrl)
+                }
                     .cookie(
                         Cookie(
                             name = AUTH_CSRF_TOKEN_COOKIE_NAME,
