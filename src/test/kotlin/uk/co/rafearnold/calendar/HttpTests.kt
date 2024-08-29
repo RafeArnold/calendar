@@ -37,6 +37,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.io.path.readBytes
@@ -557,7 +558,7 @@ class HttpTests {
                 startServer(
                     clock = now.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                     tokenHashKey = tokenHashKey,
                 )
 
@@ -613,7 +614,7 @@ class HttpTests {
         GoogleOAuthServer().use { authServer ->
             val auth =
                 authServer.toAuthConfig(allowedUserEmails = listOf(impersonatorEmail, otherUserEmail1, otherUserEmail2))
-            server = startServer(auth = auth, impersonatorEmails = listOf(impersonatorEmail))
+            server = startServer(auth = auth, adminEmails = listOf(impersonatorEmail))
 
             val impersonatedIdTokenCookie = login(email = otherUserEmail1, authServer = authServer).idTokenCookie()
             val impersonatorIdTokenCookie = login(email = impersonatorEmail, authServer = authServer).idTokenCookie()
@@ -651,7 +652,7 @@ class HttpTests {
                 startServer(
                     clock = now.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                     tokenHashKey = tokenHashKey,
                 )
 
@@ -766,6 +767,32 @@ class HttpTests {
         }
     }
 
+    @Test
+    fun `future months cannot be navigated to`() {
+        val now = LocalDate.of(2024, 8, 24)
+        server = startServer(clock = now.toClock())
+
+        fun monthRequest(month: YearMonth): HttpRequest.Builder =
+            HttpRequest.newBuilder(server.uri("/?month=$month")).GET()
+
+        val response1 = httpClient.send(monthRequest(now.minusMonths(1).toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(200, response1.statusCode())
+
+        val response2 = httpClient.send(monthRequest(now.toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(200, response2.statusCode())
+
+        val response3 = httpClient.send(monthRequest(now.plusMonths(1).toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(302, response3.statusCode())
+        assertEquals(listOf("/"), response3.headers().allValues("location"))
+        assertEquals("", response3.body())
+
+        @Suppress("UastIncorrectHttpHeaderInspection")
+        val request4 = monthRequest(now.plusMonths(1).toYearMonth()).header("hx-request", "true").build()
+        val response4 = httpClient.send(request4, BodyHandlers.ofString())
+        assertEquals(403, response4.statusCode())
+        assertEquals("", response4.body())
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -837,7 +864,7 @@ class HttpTests {
         clock: Clock = Clock.systemUTC(),
         auth: AuthConfig = NoAuth,
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
-        impersonatorEmails: List<String> = emptyList(),
+        adminEmails: List<String> = emptyList(),
         tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
     ): Http4kServer =
         Config(
@@ -847,7 +874,7 @@ class HttpTests {
             assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
-            impersonatorEmails = impersonatorEmails,
+            adminEmails = adminEmails,
             tokenHashKeyBase64 = tokenHashKey.base64Encode(),
         ) { "whatever" }.startServer()
 

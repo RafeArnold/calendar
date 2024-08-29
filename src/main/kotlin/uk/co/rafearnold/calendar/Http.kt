@@ -58,7 +58,7 @@ data class Config(
     val assetLoader: ResourceLoader,
     val hotReloading: Boolean,
     val auth: AuthConfig,
-    val impersonatorEmails: List<String>,
+    val adminEmails: List<String>,
     val tokenHashKeyBase64: String,
     val messageLoader: MessageLoader,
 ) {
@@ -71,7 +71,6 @@ interface AuthConfig {
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
-        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory
 
     fun logoutHandler(): HttpHandler
@@ -85,12 +84,9 @@ data object NoAuth : AuthConfig {
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
-        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list ->
-            routes(*list)
-                .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
-                .withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
+            routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
         }
 
     override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
@@ -125,18 +121,23 @@ fun Config.startServer(): Http4kServer {
     val router =
         routes(
             assetsRoute(assetLoader = assetLoader),
-            auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey, listOf(impersonatedFilter))
+            auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey)
                 .routes(
-                    indexRoute(view, clock, userLens, impersonatedUserLens, impersonatorEmails, calendarModelHelper),
-                    daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
-                    dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
-                    previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
-                    impersonateRoute(view, clock, userRepository, userLens, impersonatorEmails, impersonationTokens),
+                    routes(
+                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                        daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                        dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
+                        previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
+                        impersonateRoute(view, clock, userRepository, userLens, impersonationTokens),
+                    )
+                        .withFilter(impersonatedFilter)
+                        .withFilter(adminUserFilter(adminEmails = adminEmails, userLens = userLens)),
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
             logoutRoute(auth),
             stopImpersonatingRoute(),
         ).withFilter(forbiddenFilter)
+            .withFilter(redirectFilter)
     val app =
         Filter { next ->
             {
@@ -194,13 +195,16 @@ fun indexRoute(
     clock: Clock,
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
-    impersonatorEmails: List<String>,
     calendarModelHelper: CalendarModelHelper,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
-        val month = monthQuery(request) ?: clock.toDate().toYearMonth()
-        val impersonatedUser0 = impersonatedUser(request)
+        val now = clock.toDate().toYearMonth()
+        val month = monthQuery(request) ?: now
         val user0 = user(request)
+        if (now < month && !user0.isAdmin) {
+            if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
+        }
+        val impersonatedUser0 = impersonatedUser(request)
         val errorCookie0 = errorCookie(request)
         val viewModel =
             HomeViewModel(
@@ -211,7 +215,7 @@ fun indexRoute(
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = month.year,
                 monthImageLink = monthImageLink(month),
-                canImpersonate = user0.email in impersonatorEmails,
+                canImpersonate = user0.isAdmin,
                 impersonatingEmail = impersonatedUser0?.email,
                 error = errorCookie0?.value,
                 calendarBaseModel = calendarModelHelper.create(month, impersonatedUser0 ?: user0),
@@ -322,6 +326,16 @@ private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthForm
 private fun previousDaysLink(from: LocalDate?) =
     "/previous-days" + if (from != null) "?from=" + from.format(DateTimeFormatter.ISO_LOCAL_DATE) else ""
 
+fun adminUserFilter(
+    adminEmails: List<String>,
+    userLens: RequestContextLens<User>,
+) = Filter { next ->
+    { request ->
+        val user = userLens(request)
+        next(if (user.email in adminEmails) userLens(user.copy(isAdmin = true), request) else request)
+    }
+}
+
 val forbiddenFilter: Filter =
     Filter { next ->
         {
@@ -334,3 +348,20 @@ val forbiddenFilter: Filter =
     }
 
 class ForbiddenException : RuntimeException()
+
+val redirectFilter: Filter =
+    Filter { next ->
+        {
+            try {
+                next(it)
+            } catch (e: RedirectException) {
+                if (it.isHtmx()) {
+                    Response(OK).with(htmxRedirect(location = e.redirectLocation))
+                } else {
+                    Response(FOUND).header("location", e.redirectLocation)
+                }
+            }
+        }
+    }
+
+class RedirectException(val redirectLocation: String) : RuntimeException()

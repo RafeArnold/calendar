@@ -392,22 +392,21 @@ class EndToEndTests {
         val monthImagesDir = assetsDir.resolve("month-images").apply { Files.createDirectories(this) }
         copyImage("cat-1.jpg", monthImagesDir.resolve("2024-07.jpg"))
         copyImage("cat-2.jpg", monthImagesDir.resolve("2024-06.jpg"))
-        copyImage("cat-3.jpg", monthImagesDir.resolve("2024-08.jpg"))
+        copyImage("cat-3.jpg", monthImagesDir.resolve("2024-05.jpg"))
         val assetLoader = ResourceLoader.Directory(baseDir = assetsDir.toString())
         server = startServer(clock = clock, assetLoader = assetLoader) { "whatever" }
         val page = browser.newPage()
 
         page.navigateHome(port = server.port())
-
         page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 7))
 
+        page.clickPreviousMonth()
+        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 6))
+
+        page.clickPreviousMonth()
+        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 5))
+
         page.clickNextMonth()
-
-        page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 8))
-
-        page.clickPreviousMonth()
-        page.clickPreviousMonth()
-
         page.assertMonthImageIs(assetsDir, YearMonth.of(2024, 6))
     }
 
@@ -441,8 +440,8 @@ class EndToEndTests {
             page.clickDay(1)
             page.assertThatDayTextIs("something sweet")
             page.clickBack()
-            page.clickNextMonth()
-            page.assertCurrentMonthIs(today.toYearMonth().plusMonths(1))
+            page.clickPreviousMonth()
+            page.assertCurrentMonthIs(today.toYearMonth().minusMonths(1))
 
             // No more requests made to the auth server after the token is exchanged.
             assertEquals(0, authServer.allNonCertRequests().size)
@@ -578,14 +577,9 @@ class EndToEndTests {
         previousDays.add(PreviousDay(text = dayTexts[LocalDate.of(2024, 8, 10)]!!, date = "Sat, 10 Aug 2024"))
         page.assertPreviousDaysAre(previousDays)
 
-        page.clickNextMonth()
-        page.assertCurrentMonthIs(today.plusMonths(1).toYearMonth())
-        page.assertPreviousDaysAre(previousDays)
-
         page.reload()
         page.assertPreviousDaysAre(previousDays)
 
-        page.clickPreviousMonth()
         page.clickPreviousMonth()
         page.assertCurrentMonthIs(today.minusMonths(1).toYearMonth())
         page.assertPreviousDaysAre(previousDays)
@@ -601,6 +595,10 @@ class EndToEndTests {
         page.clickDay(dayNum = 20)
         page.clickBack()
         previousDays.add(4, PreviousDay(text = dayTexts[LocalDate.of(2024, 7, 20)]!!, date = "Sat, 20 Jul 2024"))
+        page.assertPreviousDaysAre(previousDays)
+
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(today.toYearMonth())
         page.assertPreviousDaysAre(previousDays)
     }
 
@@ -655,8 +653,8 @@ class EndToEndTests {
         page.previousDayTexts().nth(39).scrollIntoViewIfNeeded()
         assertThat(page.previousDayTexts()).hasCount(50)
 
-        page.clickNextMonth()
-        page.assertCurrentMonthIs(today.plusMonths(1).toYearMonth())
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(today.minusMonths(1).toYearMonth())
 
         assertThat(page.previousDayTexts()).hasCount(50)
         assertThat(page.calendar()).hasCount(1)
@@ -698,7 +696,7 @@ class EndToEndTests {
             val allowedUserEmails = listOf(impersonatorEmail, otherUserEmail)
             val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
             server =
-                startServer(clock = clock, auth = auth, impersonatorEmails = listOf(impersonatorEmail)) { "whatever" }
+                startServer(clock = clock, auth = auth, adminEmails = listOf(impersonatorEmail)) { "whatever" }
 
             val otherUserPage = browser.newPage()
             otherUserPage.login(email = otherUserEmail, authServer = authServer)
@@ -739,7 +737,7 @@ class EndToEndTests {
             val allowedUserEmails = listOf(impersonatorEmail, otherUserEmail)
             val auth = authServer.toAuthConfig(allowedUserEmails = allowedUserEmails)
             server =
-                startServer(clock = clock, auth = auth, impersonatorEmails = listOf(impersonatorEmail)) { "whatever" }
+                startServer(clock = clock, auth = auth, adminEmails = listOf(impersonatorEmail)) { "whatever" }
 
             val otherUserPage = browser.newPage()
             otherUserPage.login(email = otherUserEmail, authServer = authServer)
@@ -800,7 +798,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                     messageLoader = MapBackedMessageLoader(dayTexts),
                 )
             val dateTimeFormatter = DateTimeFormatter.ofPattern("eee, d MMM yyyy")
@@ -854,7 +852,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail1, impersonatorEmail2),
+                    adminEmails = listOf(impersonatorEmail1, impersonatorEmail2),
                     messageLoader = MapBackedMessageLoader(dayTexts),
                 )
 
@@ -897,7 +895,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                 ) { "whatever" }
 
             val otherUserPage = browser.newPage()
@@ -951,7 +949,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                 ) { "whatever" }
 
             browser.newPage().login(email = otherUserEmail, authServer = authServer)
@@ -980,7 +978,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                 ) { "whatever" }
 
             val impersonatorPage = browser.newPage()
@@ -1020,7 +1018,7 @@ class EndToEndTests {
                 startServer(
                     clock = today.toClock(),
                     auth = auth,
-                    impersonatorEmails = listOf(impersonatorEmail),
+                    adminEmails = listOf(impersonatorEmail),
                 ) { "whatever" }
 
             val otherUserPage = browser.newPage()
@@ -1112,6 +1110,54 @@ class EndToEndTests {
         page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
     }
 
+    @Test
+    fun `future months cannot be navigated to`() {
+        val now = LocalDate.of(2024, 8, 24)
+        server = startServer(clock = now.toClock()) { "whatever" }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(now.toYearMonth())
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(now.minusMonths(1).toYearMonth())
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(now.toYearMonth())
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(now.toYearMonth())
+
+        page.navigateHome(port = server.port(), now.toYearMonth())
+        page.assertCurrentMonthIs(now.toYearMonth())
+
+        page.navigateHome(port = server.port(), now.plusMonths(1).toYearMonth())
+        page.assertCurrentMonthIs(now.toYearMonth())
+
+        page.navigateHome(port = server.port(), now.plusMonths(3).toYearMonth())
+        page.assertCurrentMonthIs(now.toYearMonth())
+    }
+
+    @Test
+    fun `users with permission can access future months`() {
+        val now = LocalDate.of(2024, 8, 24)
+        GoogleOAuthServer(clock = now.toClock()).use { authServer ->
+            val userEmail = "admin@example.com"
+            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
+            server =
+                startServer(clock = now.toClock(), auth = auth, adminEmails = listOf(userEmail)) { "whatever" }
+
+            val page = browser.newPage()
+            page.login(email = userEmail, authServer = authServer)
+            page.assertCurrentMonthIs(now.toYearMonth())
+            page.clickNextMonth()
+            page.assertCurrentMonthIs(now.plusMonths(1).toYearMonth())
+
+            page.navigateHome(port = server.port(), now.plusMonths(1).toYearMonth())
+            page.assertCurrentMonthIs(now.plusMonths(1).toYearMonth())
+
+            page.navigateHome(port = server.port(), now.plusMonths(3).toYearMonth())
+            page.assertCurrentMonthIs(now.plusMonths(3).toYearMonth())
+        }
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -1144,7 +1190,7 @@ class EndToEndTests {
         clock: Clock = Clock.systemUTC(),
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         auth: AuthConfig = NoAuth,
-        impersonatorEmails: List<String> = emptyList(),
+        adminEmails: List<String> = emptyList(),
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -1154,7 +1200,7 @@ class EndToEndTests {
             assetLoader = assetLoader,
             hotReloading = false,
             auth = auth,
-            impersonatorEmails = impersonatorEmails,
+            adminEmails = adminEmails,
             tokenHashKeyBase64 = Random.nextBytes(32).base64Encode(),
             messageLoader = messageLoader,
         ).startServer()
