@@ -24,7 +24,7 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config {
         assetLoader = assetLoader,
         hotReloading = env["HOT_RELOADING"] == "true",
         auth = AuthConfig.fromEnv(env),
-        impersonatorEmails = env["IMPERSONATORS"]?.split(" ") ?: emptyList(),
+        adminEmails = env["ADMIN_USERS"]?.split(" ") ?: emptyList(),
         tokenHashKeyBase64 = randomBytes(numBytes = 32).base64Encode(),
         messageLoader = AssetMessageLoader(assetLoader),
     )

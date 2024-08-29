@@ -44,7 +44,6 @@ data class GoogleOauth(
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
-        additionalFilters: List<Filter>,
     ): RoutingHandlerFactory =
         RoutingHandlerFactory { list ->
             val oauth =
@@ -61,9 +60,7 @@ data class GoogleOauth(
                 )
             routes(
                 GoogleOAuthCallback(oauth, userRepository),
-                routes(*list)
-                    .run { additionalFilters.fold(this) { handler, filter -> handler.withFilter(filter) } }
-                    .withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
             )
         }
 

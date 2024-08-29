@@ -24,4 +24,4 @@ class UserRepository(private val ctx: DSLContext) {
         User(id = userId!!, googleSubjectId = googleSubjectId!!, email = emailAddress!!)
 }
 
-data class User(val id: Int, val googleSubjectId: String, val email: String)
+data class User(val id: Int, val googleSubjectId: String, val email: String, val isAdmin: Boolean = false)

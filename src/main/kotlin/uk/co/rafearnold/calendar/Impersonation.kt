@@ -45,12 +45,11 @@ fun impersonateRoute(
     clock: Clock,
     userRepository: UserRepository,
     user: RequestContextLens<User>,
-    impersonatorEmails: List<String>,
     tokens: ImpersonationTokens,
 ): RoutingHttpHandler =
     "/impersonate" bind POST to { request ->
-        val impersonatorEmail = user(request).email
-        if (impersonatorEmail !in impersonatorEmails) throw ForbiddenException()
+        val user0 = user(request)
+        if (!user0.isAdmin) throw ForbiddenException()
         val emailToImpersonate = emailToImpersonate(impersonateForm(request))
         val userToImpersonate = userRepository.getByEmail(email = emailToImpersonate)
         val error = if (userToImpersonate == null) "user $emailToImpersonate not found" else null
@@ -58,7 +57,7 @@ fun impersonateRoute(
             val expirationTimeSeconds = clock.instant().plus(1, ChronoUnit.HOURS).epochSecond
             val impersonationPayload =
                 ImpersonationPayload(
-                    impersonatorEmail = impersonatorEmail,
+                    impersonatorEmail = user0.email,
                     impersonatedEmail = emailToImpersonate,
                     expirationTimeSeconds = expirationTimeSeconds,
                 )
