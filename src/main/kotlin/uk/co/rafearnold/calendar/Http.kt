@@ -14,7 +14,6 @@ import org.http4k.core.Response
 import org.http4k.core.Status
 import org.http4k.core.Status.Companion.FORBIDDEN
 import org.http4k.core.Status.Companion.FOUND
-import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Store
 import org.http4k.core.cookie.invalidateCookie
@@ -128,7 +127,7 @@ fun Config.startServer(): Http4kServer {
                         daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
                         dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                         previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
-                        impersonateRoute(view, clock, userRepository, userLens, impersonationTokens),
+                        impersonateRoute(clock, userRepository, userLens, impersonationTokens),
                     )
                         .withFilter(impersonatedFilter)
                         .withFilter(adminUserFilter(adminEmails = adminEmails, userLens = userLens)),
@@ -138,6 +137,7 @@ fun Config.startServer(): Http4kServer {
             stopImpersonatingRoute(),
         ).withFilter(forbiddenFilter)
             .withFilter(redirectFilter)
+            .withFilter(errorFilter(view))
     val app =
         Filter { next ->
             {
@@ -248,20 +248,16 @@ fun dayRoute(
     "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
-        val message = messageLoader[date]
-        if (message != null) {
-            if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
-            val month = date.toYearMonth()
-            val viewModel =
-                DayViewModel(
-                    text = message,
-                    backLink = daysLink(month),
-                    dayOfMonth = date.dayOfMonth,
-                )
-            Response(OK).with(view of viewModel)
-        } else {
-            Response(NOT_FOUND)
-        }
+        val message = messageLoader[date] ?: throw DisplayErrorException(errorMessage = "error loading message")
+        if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
+        val month = date.toYearMonth()
+        val viewModel =
+            DayViewModel(
+                text = message,
+                backLink = daysLink(month),
+                dayOfMonth = date.dayOfMonth,
+            )
+        Response(OK).with(view of viewModel)
     }
 
 val previousDaysFromQuery = Query.map(StringBiDiMappings.localDate(DateTimeFormatter.ISO_LOCAL_DATE)).optional("from")
@@ -365,3 +361,19 @@ val redirectFilter: Filter =
     }
 
 class RedirectException(val redirectLocation: String) : RuntimeException()
+
+fun errorFilter(view: BiDiBodyLens<ViewModel>): Filter =
+    Filter { next ->
+        {
+            try {
+                next(it)
+            } catch (e: DisplayErrorException) {
+                Response(OK)
+                    .header("hx-retarget", "#error")
+                    .header("hx-reswap", "outerHTML")
+                    .with(view of ErrorViewModel(error = e.errorMessage))
+            }
+        }
+    }
+
+class DisplayErrorException(val errorMessage: String) : RuntimeException()
