@@ -52,7 +52,6 @@ class HomeViewModel(
     val monthImageLink: String,
     val canImpersonate: Boolean,
     val impersonatingEmail: String?,
-    val error: String?,
     calendarBaseModel: CalendarBaseModel,
 ) : ViewModel, CalendarBaseModel by calendarBaseModel {
     override fun template(): String = if (justCalendar) "calendar" else "home"

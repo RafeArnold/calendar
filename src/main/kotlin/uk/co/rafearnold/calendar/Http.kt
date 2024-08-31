@@ -16,12 +16,10 @@ import org.http4k.core.Status.Companion.FORBIDDEN
 import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Store
-import org.http4k.core.cookie.invalidateCookie
 import org.http4k.core.then
 import org.http4k.core.with
 import org.http4k.filter.ServerFilters
 import org.http4k.lens.BiDiBodyLens
-import org.http4k.lens.Cookies
 import org.http4k.lens.Path
 import org.http4k.lens.Query
 import org.http4k.lens.RequestContextKey
@@ -178,9 +176,6 @@ class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceL
     }
 }
 
-const val ERROR_COOKIE_NAME: String = "error"
-private val errorCookie = Cookies.optional(ERROR_COOKIE_NAME)
-
 private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
     RequestContextKey.required(contexts, name = "user")
 
@@ -205,7 +200,6 @@ fun indexRoute(
             if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
         }
         val impersonatedUser0 = impersonatedUser(request)
-        val errorCookie0 = errorCookie(request)
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
@@ -217,11 +211,9 @@ fun indexRoute(
                 monthImageLink = monthImageLink(month),
                 canImpersonate = user0.isAdmin,
                 impersonatingEmail = impersonatedUser0?.email,
-                error = errorCookie0?.value,
                 calendarBaseModel = calendarModelHelper.create(month, impersonatedUser0 ?: user0),
             )
         Response(OK).with(view of viewModel)
-            .run { if (errorCookie0 != null) invalidateCookie(ERROR_COOKIE_NAME) else this }
     }
 
 fun daysRoute(
