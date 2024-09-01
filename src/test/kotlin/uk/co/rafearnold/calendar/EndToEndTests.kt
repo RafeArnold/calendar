@@ -345,25 +345,30 @@ class EndToEndTests {
         page.navigateHome(port = server.port())
         page.assertCurrentMonthIs(YearMonth.of(2024, 7))
         page.assertOpenedDaysAre(emptyList(), YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre(1..31, YearMonth.of(2024, 7))
 
         page.clickDay(1)
         page.clickBack()
         page.assertOpenedDaysAre(listOf(1), YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre(2..31, YearMonth.of(2024, 7))
 
         page.clickDay(5)
         page.clickBack()
         page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre((2..4) + (6..31), YearMonth.of(2024, 7))
 
         // Clicking an already opened day changes nothing.
         page.clickDay(1)
         page.clickBack()
         page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre((2..4) + (6..31), YearMonth.of(2024, 7))
 
         // Restarting the server changes nothing.
         server.stop()
         server = startServer(clock = clock) { "whatever" }
         page.navigateHome(port = server.port())
         page.assertOpenedDaysAre(listOf(1, 5), YearMonth.of(2024, 7))
+        page.assertUnopenedDaysAre((2..4) + (6..31), YearMonth.of(2024, 7))
     }
 
     @Test
@@ -984,26 +989,18 @@ class EndToEndTests {
             val impersonatorPage = browser.newPage()
             impersonatorPage.clock().install()
             impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
-            assertThat(impersonatorPage.error()).not().isVisible()
+            impersonatorPage.assertErrorIsNotDisplayed()
 
             impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
-            assertThat(impersonatorPage.error()).isVisible()
-            val expectedError = "user $otherUserEmail not found"
-            assertThat(impersonatorPage.error()).hasText(expectedError)
             assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
             assertThat(impersonatorPage.stopImpersonatingButton()).not().isVisible()
             assertThat(impersonatorPage.impersonateEmailInput()).isVisible()
             assertThat(impersonatorPage.impersonateButton()).isVisible()
-
-            impersonatorPage.clock().fastForward(4500)
-            assertThat(impersonatorPage.error()).isVisible()
-            assertThat(impersonatorPage.error()).hasText(expectedError)
-
-            impersonatorPage.clock().fastForward(1000)
-            assertThat(impersonatorPage.error()).not().isVisible()
+            val expectedError = "user $otherUserEmail not found"
+            impersonatorPage.assertErrorIsDisplayed(errorMessage = expectedError)
 
             impersonatorPage.reload()
-            assertThat(impersonatorPage.error()).not().isVisible()
+            impersonatorPage.assertErrorIsNotDisplayed()
         }
     }
 
@@ -1029,7 +1026,6 @@ class EndToEndTests {
             assertThat(otherUserPage.previousDayTexts()).hasCount(1)
 
             val impersonatorPage = browser.newPage()
-            impersonatorPage.clock().install()
             impersonatorPage.login(email = impersonatorEmail, authServer = authServer)
             assertThat(impersonatorPage.impersonatingMessage()).not().isVisible()
             impersonatorPage.assertOpenedDaysAre(emptyList(), today.toYearMonth())
@@ -1158,6 +1154,79 @@ class EndToEndTests {
         }
     }
 
+    @Test
+    fun `error is shown when day text is not available`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val messageLoader = MapBackedMessageLoader(messages = mapOf(now.minusDays(1) to "test 1"))
+        server = startServer(clock = now.toClock(), messageLoader = messageLoader)
+
+        val page = browser.newPage()
+        page.clock().install()
+        page.navigateHome(port = server.port())
+        page.assertErrorIsNotDisplayed()
+        page.clickDay(23)
+        page.assertThatDayTextIs("test 1")
+        page.assertErrorIsNotDisplayed()
+        page.clickBack()
+        page.assertErrorIsNotDisplayed()
+
+        page.day(22).click()
+        assertThat(page.dayText()).not().isVisible()
+        val expectedError = "error loading message"
+        page.assertErrorIsDisplayed(errorMessage = expectedError)
+
+        page.day(24).click()
+        assertThat(page.dayText()).not().isVisible()
+        page.assertErrorIsDisplayed(errorMessage = expectedError)
+    }
+
+    @Test
+    fun `earliest open-able date can be configured`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val earliestDate = LocalDate.of(2024, 7, 13)
+        val message = "something sweet"
+        server = startServer(clock = now.toClock(), earliestDate = earliestDate) { message }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+        page.assertDaysAreEnabled(1..24)
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertDaysAreEnabled(13..31)
+        page.assertDaysAreDisabled(1..12)
+        page.clickDay(13)
+        page.assertThatDayTextIs(message)
+        assertThat(page.previousMonthButton()).not().isVisible()
+    }
+
+    @Test
+    fun `future days are displayed differently`() {
+        val clock = LocalDate.of(2024, 8, 24).toClock().mutable()
+        server = startServer(clock = clock) { "whatever" }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertClosedDaysAre(25..31, YearMonth.of(2024, 8))
+
+        clock.del = LocalDate.of(2024, 9, 1).toClock()
+        page.clickNextMonth()
+        page.assertClosedDaysAre(2..30, YearMonth.of(2024, 9))
+    }
+
+    @Test
+    fun `days before earliest date are displayed differently`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val earliestDate = LocalDate.of(2024, 7, 13)
+        server = startServer(clock = now.toClock(), earliestDate = earliestDate) { "whatever" }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertClosedDaysAre(25..31, YearMonth.of(2024, 8))
+        page.clickPreviousMonth()
+        page.assertClosedDaysAre(1..12, YearMonth.of(2024, 7))
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -1191,6 +1260,7 @@ class EndToEndTests {
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         auth: AuthConfig = NoAuth,
         adminEmails: List<String> = emptyList(),
+        earliestDate: LocalDate = LocalDate.EPOCH,
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -1202,6 +1272,7 @@ class EndToEndTests {
             auth = auth,
             adminEmails = adminEmails,
             tokenHashKeyBase64 = Random.nextBytes(32).base64Encode(),
+            earliestDate = earliestDate,
             messageLoader = messageLoader,
         ).startServer()
 }
@@ -1229,19 +1300,35 @@ private fun Page.assertDaysAreDisabled(days: Iterable<Int>) {
     for (dayNum in days) assertThat(day(dayNum = dayNum)).isDisabled()
 }
 
+private fun Page.assertUnopenedDaysAre(
+    days: Iterable<Int>,
+    month: YearMonth,
+) {
+    assertDaysWithClassAre(days, "day-ready", month)
+}
+
 private fun Page.assertOpenedDaysAre(
     days: Iterable<Int>,
     month: YearMonth,
 ) {
+    assertDaysWithClassAre(days, "day-opened", month)
+}
+
+private fun Page.assertClosedDaysAre(
+    days: Iterable<Int>,
+    month: YearMonth,
+) {
+    assertDaysWithClassAre(days, "day-closed", month)
+}
+
+private fun Page.assertDaysWithClassAre(
+    days: Iterable<Int>,
+    cssClass: String,
+    month: YearMonth,
+) {
     for (dayNum in (1..month.lengthOfMonth())) {
         val day = day(dayNum = dayNum)
-        if (dayNum in days) {
-            assertThat(day).hasClass("day-opened")
-            assertThat(day).not().hasClass("day-ready")
-        } else {
-            assertThat(day).hasClass("day-ready")
-            assertThat(day).not().hasClass("day-opened")
-        }
+        if (dayNum in days) assertThat(day).hasClass(cssClass) else assertThat(day).not().hasClass(cssClass)
     }
 }
 
@@ -1296,6 +1383,20 @@ private fun Page.assertPreviousDaysAre(expected: List<PreviousDay>) {
 }
 
 private data class PreviousDay(val text: String, val date: String)
+
+private fun Page.assertErrorIsDisplayed(errorMessage: String) {
+    assertThat(error()).isVisible()
+    assertThat(error()).hasText(errorMessage)
+    clock().fastForward(4500)
+    assertThat(error()).isVisible()
+    assertThat(error()).hasText(errorMessage)
+    clock().fastForward(1000)
+    assertThat(error()).not().isVisible()
+}
+
+private fun Page.assertErrorIsNotDisplayed() {
+    assertThat(error()).not().isVisible()
+}
 
 private fun Page.clickDay(dayNum: Int) {
     assertThat(dayText()).not().isVisible()

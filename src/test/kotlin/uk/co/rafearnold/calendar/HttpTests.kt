@@ -876,6 +876,7 @@ class HttpTests {
             auth = auth,
             adminEmails = adminEmails,
             tokenHashKeyBase64 = tokenHashKey.base64Encode(),
+            earliestDate = LocalDate.EPOCH,
         ) { "whatever" }.startServer()
 
     private fun googleOauth(

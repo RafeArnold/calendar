@@ -14,15 +14,12 @@ import org.http4k.core.Response
 import org.http4k.core.Status
 import org.http4k.core.Status.Companion.FORBIDDEN
 import org.http4k.core.Status.Companion.FOUND
-import org.http4k.core.Status.Companion.NOT_FOUND
 import org.http4k.core.Status.Companion.OK
 import org.http4k.core.Store
-import org.http4k.core.cookie.invalidateCookie
 import org.http4k.core.then
 import org.http4k.core.with
 import org.http4k.filter.ServerFilters
 import org.http4k.lens.BiDiBodyLens
-import org.http4k.lens.Cookies
 import org.http4k.lens.Path
 import org.http4k.lens.Query
 import org.http4k.lens.RequestContextKey
@@ -60,6 +57,7 @@ data class Config(
     val auth: AuthConfig,
     val adminEmails: List<String>,
     val tokenHashKeyBase64: String,
+    val earliestDate: LocalDate,
     val messageLoader: MessageLoader,
 ) {
     companion object
@@ -110,7 +108,7 @@ fun Config.startServer(): Http4kServer {
     val userLens = userLens(requestContexts)
     val impersonatedUserLens = impersonatedUserLens(requestContexts)
 
-    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository)
+    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository, earliestDate)
 
     val tokenHashKey = tokenHashKeyBase64.base64DecodedArray()
     val objectMapper = jacksonObjectMapper()
@@ -124,11 +122,11 @@ fun Config.startServer(): Http4kServer {
             auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey)
                 .routes(
                     routes(
-                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper, earliestDate),
                         daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
                         dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                         previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
-                        impersonateRoute(view, clock, userRepository, userLens, impersonationTokens),
+                        impersonateRoute(clock, userRepository, userLens, impersonationTokens),
                     )
                         .withFilter(impersonatedFilter)
                         .withFilter(adminUserFilter(adminEmails = adminEmails, userLens = userLens)),
@@ -138,6 +136,7 @@ fun Config.startServer(): Http4kServer {
             stopImpersonatingRoute(),
         ).withFilter(forbiddenFilter)
             .withFilter(redirectFilter)
+            .withFilter(errorFilter(view))
     val app =
         Filter { next ->
             {
@@ -178,9 +177,6 @@ class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceL
     }
 }
 
-const val ERROR_COOKIE_NAME: String = "error"
-private val errorCookie = Cookies.optional(ERROR_COOKIE_NAME)
-
 private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
     RequestContextKey.required(contexts, name = "user")
 
@@ -196,6 +192,7 @@ fun indexRoute(
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
     calendarModelHelper: CalendarModelHelper,
+    earliestDate: LocalDate,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
         val now = clock.toDate().toYearMonth()
@@ -205,11 +202,12 @@ fun indexRoute(
             if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
         }
         val impersonatedUser0 = impersonatedUser(request)
-        val errorCookie0 = errorCookie(request)
+        val previousMonthLink =
+            month.minusMonths(1).let { prev -> if (prev >= earliestDate.toYearMonth()) monthLink(prev) else null }
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
-                previousMonthLink = monthLink(month.minusMonths(1)),
+                previousMonthLink = previousMonthLink,
                 nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
@@ -217,11 +215,9 @@ fun indexRoute(
                 monthImageLink = monthImageLink(month),
                 canImpersonate = user0.isAdmin,
                 impersonatingEmail = impersonatedUser0?.email,
-                error = errorCookie0?.value,
                 calendarBaseModel = calendarModelHelper.create(month, impersonatedUser0 ?: user0),
             )
         Response(OK).with(view of viewModel)
-            .run { if (errorCookie0 != null) invalidateCookie(ERROR_COOKIE_NAME) else this }
     }
 
 fun daysRoute(
@@ -248,20 +244,11 @@ fun dayRoute(
     "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
         if (date.isAfter(clock.now().toLocalDate())) throw ForbiddenException()
-        val message = messageLoader[date]
-        if (message != null) {
-            if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
-            val month = date.toYearMonth()
-            val viewModel =
-                DayViewModel(
-                    text = message,
-                    backLink = daysLink(month),
-                    dayOfMonth = date.dayOfMonth,
-                )
-            Response(OK).with(view of viewModel)
-        } else {
-            Response(NOT_FOUND)
-        }
+        val message = messageLoader[date] ?: throw DisplayErrorException(errorMessage = "error loading message")
+        if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
+        val month = date.toYearMonth()
+        val viewModel = DayViewModel(text = message, backLink = daysLink(month), dayOfMonth = date.dayOfMonth)
+        Response(OK).with(view of viewModel)
     }
 
 val previousDaysFromQuery = Query.map(StringBiDiMappings.localDate(DateTimeFormatter.ISO_LOCAL_DATE)).optional("from")
@@ -295,6 +282,7 @@ class CalendarModelHelper(
     private val messageLoader: MessageLoader,
     private val clock: Clock,
     private val daysRepo: DaysRepository,
+    private val earliestDate: LocalDate,
 ) {
     fun create(
         month: YearMonth,
@@ -308,6 +296,7 @@ class CalendarModelHelper(
             previousDays = previousDays.toPreviousDayModels(messageLoader),
             nextPreviousDaysLink = nextPreviousDaysLink,
             clock = clock,
+            earliestDate = earliestDate,
         )
     }
 }
@@ -365,3 +354,19 @@ val redirectFilter: Filter =
     }
 
 class RedirectException(val redirectLocation: String) : RuntimeException()
+
+fun errorFilter(view: BiDiBodyLens<ViewModel>): Filter =
+    Filter { next ->
+        {
+            try {
+                next(it)
+            } catch (e: DisplayErrorException) {
+                Response(OK)
+                    .header("hx-retarget", "#error")
+                    .header("hx-reswap", "outerHTML")
+                    .with(view of ErrorViewModel(error = e.errorMessage))
+            }
+        }
+    }
+
+class DisplayErrorException(val errorMessage: String) : RuntimeException()

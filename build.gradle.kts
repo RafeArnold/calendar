@@ -28,6 +28,7 @@ tasks.run<JavaExec> {
     environment("ASSET_DIRS", "src/main/resources/assets")
     environment("HOT_RELOADING", "true")
     environment("ENABLE_AUTH", "false")
+    environment("EARLIEST_DATE", "2024-07-15")
     File(".env").readLines().forEach { line ->
         val (key, value) = line.split('=')
         environment(key, value)

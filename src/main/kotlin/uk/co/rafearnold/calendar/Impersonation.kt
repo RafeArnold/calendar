@@ -18,7 +18,6 @@ import org.http4k.core.cookie.cookie
 import org.http4k.core.cookie.invalidate
 import org.http4k.core.cookie.replaceCookie
 import org.http4k.core.with
-import org.http4k.lens.BiDiBodyLens
 import org.http4k.lens.Cookies
 import org.http4k.lens.FormField
 import org.http4k.lens.RequestContextKey
@@ -27,7 +26,6 @@ import org.http4k.lens.Validator
 import org.http4k.lens.webForm
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
-import org.http4k.template.ViewModel
 import java.time.Clock
 import java.time.temporal.ChronoUnit
 
@@ -41,7 +39,6 @@ fun impersonatedUserLens(contexts: Store<RequestContext>) =
     RequestContextKey.optional<User>(contexts, name = "impersonated-user")
 
 fun impersonateRoute(
-    view: BiDiBodyLens<ViewModel>,
     clock: Clock,
     userRepository: UserRepository,
     user: RequestContextLens<User>,
@@ -51,35 +48,28 @@ fun impersonateRoute(
         val user0 = user(request)
         if (!user0.isAdmin) throw ForbiddenException()
         val emailToImpersonate = emailToImpersonate(impersonateForm(request))
-        val userToImpersonate = userRepository.getByEmail(email = emailToImpersonate)
-        val error = if (userToImpersonate == null) "user $emailToImpersonate not found" else null
-        if (error == null) {
-            val expirationTimeSeconds = clock.instant().plus(1, ChronoUnit.HOURS).epochSecond
-            val impersonationPayload =
-                ImpersonationPayload(
-                    impersonatorEmail = user0.email,
-                    impersonatedEmail = emailToImpersonate,
-                    expirationTimeSeconds = expirationTimeSeconds,
-                )
-            Response(OK)
-                .with(htmxRedirect(location = "/"))
-                .cookie(
-                    Cookie(
-                        name = IMPERSONATION_TOKEN_COOKIE_NAME,
-                        value = tokens.sign(impersonationPayload),
-                        path = "/",
-                        secure = true,
-                        httpOnly = true,
-                        sameSite = SameSite.Strict,
-                        maxAge = 1800,
-                    ),
-                )
-        } else {
-            Response(OK)
-                .header("hx-retarget", "#error")
-                .header("hx-reswap", "outerHTML")
-                .with(view of ErrorViewModel(error = error))
-        }
+        userRepository.getByEmail(email = emailToImpersonate)
+            ?: throw DisplayErrorException(errorMessage = "user $emailToImpersonate not found")
+        val expirationTimeSeconds = clock.instant().plus(1, ChronoUnit.HOURS).epochSecond
+        val impersonationPayload =
+            ImpersonationPayload(
+                impersonatorEmail = user0.email,
+                impersonatedEmail = emailToImpersonate,
+                expirationTimeSeconds = expirationTimeSeconds,
+            )
+        Response(OK)
+            .with(htmxRedirect(location = "/"))
+            .cookie(
+                Cookie(
+                    name = IMPERSONATION_TOKEN_COOKIE_NAME,
+                    value = tokens.sign(impersonationPayload),
+                    path = "/",
+                    secure = true,
+                    httpOnly = true,
+                    sameSite = SameSite.Strict,
+                    maxAge = 1800,
+                ),
+            )
     }
 
 val stopImpersonating: (Response) -> Response = {
