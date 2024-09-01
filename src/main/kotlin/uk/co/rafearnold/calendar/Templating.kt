@@ -17,8 +17,17 @@ fun YearMonth.toCalendarModel(
     previousDays: List<PreviousDayModel>,
     nextPreviousDaysLink: String,
     clock: Clock,
+    earliestDate: LocalDate,
 ): CalendarBaseModel {
-    val days = (1..lengthOfMonth()).map { atDay(it).toDayModel(opened = openedDays.contains(it), now = clock.toDate()) }
+    val days =
+        (1..lengthOfMonth()).map {
+            val atDay = atDay(it)
+            DayModel(
+                link = "/day/" + atDay.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                opened = openedDays.contains(it),
+                disabled = atDay.isAfter(clock.toDate()) || atDay.isBefore(earliestDate),
+            )
+        }
     return object : CalendarBaseModel {
         override val days: List<DayModel> = days
         override val previousMonthDays: List<Int> = previousMonthDays()
@@ -44,7 +53,7 @@ private fun YearMonth.nextMonthDays(): List<Int> {
 @Suppress("unused")
 class HomeViewModel(
     val justCalendar: Boolean,
-    val previousMonthLink: String,
+    val previousMonthLink: String?,
     val nextMonthLink: String,
     val todayLink: String,
     val month: String,
@@ -95,12 +104,6 @@ interface PreviousDaysBaseModel {
     val nextPreviousDaysLink: String
     val includeNextPreviousDaysLinkOnDay: Int
 }
-
-private fun LocalDate.toDayModel(
-    opened: Boolean,
-    now: LocalDate,
-): DayModel =
-    DayModel(link = "/day/" + format(DateTimeFormatter.ISO_LOCAL_DATE), opened = opened, disabled = this.isAfter(now))
 
 data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean)
 

@@ -1,6 +1,7 @@
 package uk.co.rafearnold.calendar
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.net.URI
 import java.nio.file.Path
@@ -19,7 +20,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 class ConfigTests {
-    private val env = mapOf("DB_URL" to UUID.randomUUID().toString())
+    private val env = mapOf("DB_URL" to UUID.randomUUID().toString(), "EARLIEST_DATE" to "1970-01-01")
     private val noAuthEnv = env + mapOf("ENABLE_AUTH" to "false")
 
     @Test
@@ -44,6 +45,7 @@ class ConfigTests {
                 "GOOGLE_OAUTH_CLIENT_SECRET" to oauthClientSecret,
                 "ALLOWED_USERS" to "$allowedEmail1 $allowedEmail2",
                 "ADMIN_USERS" to "$allowedEmail1 $adminEmail2",
+                "EARLIEST_DATE" to "2024-08-16",
             )
         val config = Config.fromEnv(env)
         assertEquals(port, config.port)
@@ -64,6 +66,7 @@ class ConfigTests {
         assertEquals(oauthClientSecret, auth.clientSecret)
         assertEquals(listOf(allowedEmail1, allowedEmail2), auth.allowedUserEmails)
         assertEquals(listOf(allowedEmail1, adminEmail2), config.adminEmails)
+        assertEquals(LocalDate.of(2024, 8, 16), config.earliestDate)
     }
 
     @Test
@@ -126,5 +129,11 @@ class ConfigTests {
     @Test
     fun `admin emails default to empty list`() {
         assertEquals(emptyList(), Config.fromEnv(noAuthEnv).adminEmails)
+    }
+
+    @Test
+    fun `earliest date is required`() {
+        val exception = assertThrows<NoSuchElementException> { Config.fromEnv(noAuthEnv - "EARLIEST_DATE") }
+        assertEquals("Key EARLIEST_DATE is missing in the map.", exception.message)
     }
 }

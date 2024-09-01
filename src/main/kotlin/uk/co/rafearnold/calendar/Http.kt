@@ -57,6 +57,7 @@ data class Config(
     val auth: AuthConfig,
     val adminEmails: List<String>,
     val tokenHashKeyBase64: String,
+    val earliestDate: LocalDate,
     val messageLoader: MessageLoader,
 ) {
     companion object
@@ -107,7 +108,7 @@ fun Config.startServer(): Http4kServer {
     val userLens = userLens(requestContexts)
     val impersonatedUserLens = impersonatedUserLens(requestContexts)
 
-    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository)
+    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository, earliestDate)
 
     val tokenHashKey = tokenHashKeyBase64.base64DecodedArray()
     val objectMapper = jacksonObjectMapper()
@@ -121,7 +122,7 @@ fun Config.startServer(): Http4kServer {
             auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey)
                 .routes(
                     routes(
-                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
+                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper, earliestDate),
                         daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
                         dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                         previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
@@ -191,6 +192,7 @@ fun indexRoute(
     user: RequestContextLens<User>,
     impersonatedUser: RequestContextLens<User?>,
     calendarModelHelper: CalendarModelHelper,
+    earliestDate: LocalDate,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
         val now = clock.toDate().toYearMonth()
@@ -200,10 +202,12 @@ fun indexRoute(
             if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
         }
         val impersonatedUser0 = impersonatedUser(request)
+        val previousMonthLink =
+            month.minusMonths(1).let { prev -> if (prev >= earliestDate.toYearMonth()) monthLink(prev) else null }
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
-                previousMonthLink = monthLink(month.minusMonths(1)),
+                previousMonthLink = previousMonthLink,
                 nextMonthLink = monthLink(month.plusMonths(1)),
                 todayLink = "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
@@ -278,6 +282,7 @@ class CalendarModelHelper(
     private val messageLoader: MessageLoader,
     private val clock: Clock,
     private val daysRepo: DaysRepository,
+    private val earliestDate: LocalDate,
 ) {
     fun create(
         month: YearMonth,
@@ -291,6 +296,7 @@ class CalendarModelHelper(
             previousDays = previousDays.toPreviousDayModels(messageLoader),
             nextPreviousDaysLink = nextPreviousDaysLink,
             clock = clock,
+            earliestDate = earliestDate,
         )
     }
 }

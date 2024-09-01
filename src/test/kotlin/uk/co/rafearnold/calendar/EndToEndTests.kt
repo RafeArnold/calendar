@@ -1175,6 +1175,26 @@ class EndToEndTests {
         page.assertErrorIsDisplayed(errorMessage = expectedError)
     }
 
+    @Test
+    fun `earliest open-able date can be configured`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val earliestDate = LocalDate.of(2024, 7, 13)
+        val message = "something sweet"
+        server = startServer(clock = now.toClock(), earliestDate = earliestDate) { message }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+        page.assertDaysAreEnabled(1..24)
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertDaysAreEnabled(13..31)
+        page.assertDaysAreDisabled(1..12)
+        page.clickDay(13)
+        page.assertThatDayTextIs(message)
+        assertThat(page.previousMonthButton()).not().isVisible()
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -1208,6 +1228,7 @@ class EndToEndTests {
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         auth: AuthConfig = NoAuth,
         adminEmails: List<String> = emptyList(),
+        earliestDate: LocalDate = LocalDate.EPOCH,
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -1219,6 +1240,7 @@ class EndToEndTests {
             auth = auth,
             adminEmails = adminEmails,
             tokenHashKeyBase64 = Random.nextBytes(32).base64Encode(),
+            earliestDate = earliestDate,
             messageLoader = messageLoader,
         ).startServer()
 }

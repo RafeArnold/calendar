@@ -6,6 +6,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.time.Clock
+import java.time.LocalDate
 
 val logger: Logger = LoggerFactory.getLogger("main")
 
@@ -26,6 +27,7 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config {
         auth = AuthConfig.fromEnv(env),
         adminEmails = env["ADMIN_USERS"]?.split(" ") ?: emptyList(),
         tokenHashKeyBase64 = randomBytes(numBytes = 32).base64Encode(),
+        earliestDate = LocalDate.parse(env.getValue("EARLIEST_DATE")),
         messageLoader = AssetMessageLoader(assetLoader),
     )
 }
