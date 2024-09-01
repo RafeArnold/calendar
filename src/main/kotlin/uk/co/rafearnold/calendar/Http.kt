@@ -243,12 +243,7 @@ fun dayRoute(
         val message = messageLoader[date] ?: throw DisplayErrorException(errorMessage = "error loading message")
         if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
         val month = date.toYearMonth()
-        val viewModel =
-            DayViewModel(
-                text = message,
-                backLink = daysLink(month),
-                dayOfMonth = date.dayOfMonth,
-            )
+        val viewModel = DayViewModel(text = message, backLink = daysLink(month), dayOfMonth = date.dayOfMonth)
         Response(OK).with(view of viewModel)
     }
 
