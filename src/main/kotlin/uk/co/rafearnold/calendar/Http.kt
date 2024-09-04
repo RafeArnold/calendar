@@ -297,6 +297,7 @@ class CalendarModelHelper(
             nextPreviousDaysLink = nextPreviousDaysLink,
             clock = clock,
             earliestDate = earliestDate,
+            showClickMeTooltip = !daysRepo.hasOpenedDays(user),
         )
     }
 }
