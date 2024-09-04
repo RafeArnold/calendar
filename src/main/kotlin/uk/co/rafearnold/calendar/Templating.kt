@@ -18,14 +18,17 @@ fun YearMonth.toCalendarModel(
     nextPreviousDaysLink: String,
     clock: Clock,
     earliestDate: LocalDate,
+    showClickMeTooltip: Boolean,
 ): CalendarBaseModel {
+    val today = clock.toDate()
     val days =
         (1..lengthOfMonth()).map {
             val atDay = atDay(it)
             DayModel(
                 link = "/day/" + atDay.format(DateTimeFormatter.ISO_LOCAL_DATE),
                 opened = openedDays.contains(it),
-                disabled = atDay.isAfter(clock.toDate()) || atDay.isBefore(earliestDate),
+                disabled = atDay.isAfter(today) || atDay.isBefore(earliestDate),
+                showClickMeTooltip = showClickMeTooltip && atDay == today,
             )
         }
     return object : CalendarBaseModel {
@@ -105,7 +108,7 @@ interface PreviousDaysBaseModel {
     val includeNextPreviousDaysLinkOnDay: Int
 }
 
-data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean)
+data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean, val showClickMeTooltip: Boolean)
 
 data class PreviousDayModel(val date: String, val text: String)
 

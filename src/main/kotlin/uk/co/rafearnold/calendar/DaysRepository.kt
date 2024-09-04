@@ -42,4 +42,7 @@ class DaysRepository(private val ctx: DSLContext, private val clock: Clock) {
             .onConflictDoNothing()
             .execute()
     }
+
+    fun hasOpenedDays(user: User): Boolean =
+        ctx.selectCount().from(OPENED_DAYS).where(OPENED_DAYS.USER_ID.eq(user.id)).fetchSingle().value1() > 0
 }

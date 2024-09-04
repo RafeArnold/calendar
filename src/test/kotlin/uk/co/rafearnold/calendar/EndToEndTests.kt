@@ -1227,6 +1227,31 @@ class EndToEndTests {
         page.assertClosedDaysAre(1..12, YearMonth.of(2024, 7))
     }
 
+    @Test
+    fun `click me tooltip is shown on current day when user first views calendar`() {
+        val clock = LocalDate.of(2024, 8, 24).toMutableClock()
+        GoogleOAuthServer(clock = clock).use { authServer ->
+            val userEmail = "test@gmail.com"
+            server = startServer(clock = clock, auth = authServer.toAuthConfig(listOf(userEmail))) { "whatever" }
+
+            val page = browser.newPage()
+            page.login(email = userEmail, authServer = authServer)
+            page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+            page.assertDaysHaveClickMeTooltip(listOf(24), YearMonth.of(2024, 8))
+            page.clickPreviousMonth()
+            page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+            page.assertDaysHaveClickMeTooltip(emptyList(), YearMonth.of(2024, 7))
+            page.clickNextMonth()
+            page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+            page.clickDay(7)
+            page.clickBack()
+            page.assertDaysHaveClickMeTooltip(emptyList(), YearMonth.of(2024, 8))
+            page.reload()
+            page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+            page.assertDaysHaveClickMeTooltip(emptyList(), YearMonth.of(2024, 8))
+        }
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -1326,9 +1351,10 @@ private fun Page.assertDaysWithClassAre(
     cssClass: String,
     month: YearMonth,
 ) {
+    val classRegex = cssClass.toPattern()
     for (dayNum in (1..month.lengthOfMonth())) {
         val day = day(dayNum = dayNum)
-        if (dayNum in days) assertThat(day).hasClass(cssClass) else assertThat(day).not().hasClass(cssClass)
+        if (dayNum in days) assertThat(day).hasClass(classRegex) else assertThat(day).not().hasClass(classRegex)
     }
 }
 
@@ -1398,6 +1424,16 @@ private fun Page.assertErrorIsNotDisplayed() {
     assertThat(error()).not().isVisible()
 }
 
+private fun Page.assertDaysHaveClickMeTooltip(
+    days: Iterable<Int>,
+    month: YearMonth,
+) {
+    for (dayNum in (1..month.lengthOfMonth())) {
+        val clickMe = dayWrapper(dayNum = dayNum).getByTestId("click-me")
+        if (dayNum in days) assertThat(clickMe).isVisible() else assertThat(clickMe).not().isAttached()
+    }
+}
+
 private fun Page.clickDay(dayNum: Int) {
     assertThat(dayText()).not().isVisible()
     assertThat(day(dayNum)).hasText(dayNum.toString())
@@ -1453,6 +1489,8 @@ private fun Page.stopImpersonating() {
 private fun Page.calendar(): Locator = getByTestId("calendar")
 
 private fun Page.day(dayNum: Int): Locator = getByTestId("day-$dayNum")
+
+private fun Page.dayWrapper(dayNum: Int): Locator = getByTestId("day-$dayNum-wrapper")
 
 private fun Page.dayText(): Locator = getByTestId("day-text")
 
