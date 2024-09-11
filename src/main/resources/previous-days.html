@@ -1,5 +1,5 @@
 {% for previousDay in model.previousDays %}
-<div class="mt-4 w-full aspect-[7/5] flex bg-white border-2 border-black rounded-2xl">
+<div class="mt-4 w-full aspect-[7/5] flex bg-day-{{ previousDay.colorIndex }} border-2 border-black rounded-2xl shadow-2xl">
     {% if loop.index == model.includeNextPreviousDaysLinkOnDay %}
     <div hx-get="{{ model.nextPreviousDaysLink }}" hx-target="#previous-days" hx-swap="beforeend" hx-trigger="revealed"></div>
     {% endif %}

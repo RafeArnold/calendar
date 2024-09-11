@@ -10,8 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
     <link href="/assets/index.min.css" rel="stylesheet">
 </head>
-<body class="w-dvw h-dvh">
-<div class="flex justify-center"><a id="back-to-top" data-testid="back-to-top" href="#" class="fixed z-50 m-10 px-4 py-1 bg-gray-300 rounded-2xl text-center drop-shadow invisible opacity-0 duration-200 ease-in-out">back to top</a></div>
+<body class="w-dvw h-dvh bg-blue-100">
+<div class="flex justify-center"><a id="back-to-top" data-testid="back-to-top" href="#" class="fixed z-50 m-10 px-4 py-1 bg-gray-300 hover:bg-gray-500 border-2 border-black hover:text-white rounded-2xl text-center drop-shadow invisible opacity-0 duration-200 ease-in-out">back to top</a></div>
 {% include "calendar.html" %}
 {% include "previous-days-wrapper.html" %}
 {% include "error.html" %}
@@ -28,7 +28,7 @@
     </form>
     {% endif %}
     <form method="get" action="/logout">
-        <button data-testid="logout" class="px-2.5 py-1 rounded-lg bg-red-300 hover:bg-red-500 text-gray-800 hover:text-black">sign out</button>
+        <button data-testid="logout" class="px-2.5 py-1 rounded-lg bg-red-400 hover:bg-red-500 border-2 border-black text-black hover:text-white duration-200 ease-in-out">sign out</button>
     </form>
 </div>
 <script>

@@ -247,7 +247,13 @@ fun dayRoute(
         val message = messageLoader[date] ?: throw DisplayErrorException(errorMessage = "error loading message")
         if (impersonatedUser(it) == null) daysRepo.markDayAsOpened(user(it), date)
         val month = date.toYearMonth()
-        val viewModel = DayViewModel(text = message, backLink = daysLink(month), dayOfMonth = date.dayOfMonth)
+        val viewModel =
+            DayViewModel(
+                text = message,
+                backLink = daysLink(month),
+                dayOfMonth = date.dayOfMonth,
+                colorIndex = date.colorIndex,
+            )
         Response(OK).with(view of viewModel)
     }
 
@@ -304,7 +310,9 @@ class CalendarModelHelper(
 
 fun List<LocalDate>.toPreviousDayModels(messageLoader: MessageLoader) =
     mapNotNull { prevDate ->
-        messageLoader[prevDate]?.let { PreviousDayModel(date = prevDate.format(previousDateFormatter), text = it) }
+        messageLoader[prevDate]?.let {
+            PreviousDayModel(date = prevDate.format(previousDateFormatter), text = it, colorIndex = prevDate.colorIndex)
+        }
     }
 
 private fun monthLink(month: YearMonth) = "/?month=" + monthFormatter.format(month)

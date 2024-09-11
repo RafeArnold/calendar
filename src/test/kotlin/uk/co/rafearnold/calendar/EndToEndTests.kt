@@ -1360,7 +1360,7 @@ private fun Page.assertDaysWithClassAre(
 
 private fun Page.assertCurrentMonthIs(month: YearMonth) {
     assertThat(monthYear()).isVisible()
-    assertThat(monthYear()).hasText(month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK) + month.year)
+    assertThat(monthYear()).hasText(month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK) + " " + month.year)
     assertNumOfDaysInCurrentMonthIs(month.lengthOfMonth())
     val previousMonth = month.minusMonths(1)
     val previousMonthDays =
