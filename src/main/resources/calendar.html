@@ -1,13 +1,13 @@
 <div id="calendar-wrapper" class="max-w-2xl mx-auto px-10 pt-5">
     <div class="h-12 flex items-center">
-        {% if model.month %}<div data-testid="month-year" class="grow m-4 text-sm"><span class="pr-3 text-xl">{{ model.month }}</span>{{ model.year }}</div>{% endif %}
-        {% if model.todayLink %}<button data-testid="today" hx-get="{{ model.todayLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="mx-3 px-2 h-8 text-gray-500 hover:text-black border-gray-300 hover:border-gray-500 border-2 rounded-lg">today</button>{% endif %}
-        {% if model.previousMonthLink %}<button id="previous-month" data-testid="previous-month" hx-get="{{ model.previousMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="p-1"><i class="fa-solid fa-chevron-up text-xl"></i></button>{% endif %}
-        {% if model.nextMonthLink %}<button id="next-month" data-testid="next-month" hx-get="{{ model.nextMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML" class="p-1 mr-1"><i class="fa-solid fa-chevron-down text-xl"></i></button>{% endif %}
+        {% if model.month %}<div data-testid="month-year" class="grow m-4 text-sm dark:text-white"><span class="pr-2 text-xl">{{ model.month }}</span> {{ model.year }}</div>{% endif %}
+        {% if model.todayLink %}<button data-testid="today" hx-get="{{ model.todayLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="mx-3 px-2 h-8 bg-white hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-500 text-gray-700 hover:text-black dark:text-gray-400 dark:hover:text-black border-gray-500 hover:border-black border-2 rounded-lg duration-200 ease-in-out">today</button>{% endif %}
+        {% if model.previousMonthLink %}<button data-testid="previous-month" hx-get="{{ model.previousMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="p-1"><i class="fa-solid fa-chevron-up text-xl dark:text-white"></i></button>{% endif %}
+        {% if model.nextMonthLink %}<button data-testid="next-month" hx-get="{{ model.nextMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="p-1 mr-1"><i class="fa-solid fa-chevron-down text-xl dark:text-white"></i></button>{% endif %}
     </div>
-    <div data-testid="calendar" class="w-full rounded-2xl bg-black shadow-2xl">
-        <div class="p-5 pb-0">
-            <img data-testid="month-image" src="{{ model.monthImageLink }}" alt="calendar picture for the currently displayed month" class="rounded-t-md">
+    <div data-testid="calendar" class="w-full bg-gradient-to-br from-indigo-300 via-purple-400 to-pink-300 dark:from-indigo-800 dark:via-purple-700 dark:to-pink-800 rounded-2xl border-2 border-black dark:border-white shadow-2xl">
+        <div class="m-5 mb-0 border-2 border-black dark:border-white rounded-lg">
+            <img data-testid="month-image" src="{{ model.monthImageLink }}" alt="calendar picture for the currently displayed month" class="rounded-md">
         </div>
         <div id="calendar-content" class="p-3">
             {% include "days.html" %}

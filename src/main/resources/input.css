@@ -4,23 +4,52 @@
 
 @layer components {
     .day-base {
-        @apply aspect-square m-[12%] flex items-center justify-center bg-white text-sm select-none;
-        view-transition-class: day;
+        @apply aspect-square m-[12%] flex items-center justify-center bg-white border-2 border-black dark:border-gray-400 dark:text-white text-sm sm:text-2xl select-none;
     }
     .day-opened {
-        @apply day-base bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
+        @apply day-base bg-gray-400 hover:bg-gray-500 dark:bg-gray-500 dark:hover:bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
     }
     .day-closed {
         @apply day-other-month;
     }
     .day-ready {
-        @apply day-base border-2;
+        @apply day-base dark:border-gray-200;
     }
     .day-other-month {
-        @apply day-base bg-gray-700 text-gray-400;
+        @apply day-base bg-gray-700 dark:bg-gray-800 text-gray-400;
     }
-
-    ::view-transition-old(.day),
-    ::view-transition-new(.day) {
-    }
+    .bg-day-0 { @apply bg-red-300 dark:bg-red-700; }
+    .bg-day-1 { @apply bg-orange-300 dark:bg-orange-700; }
+    .bg-day-2 { @apply bg-amber-300 dark:bg-amber-700; }
+    .bg-day-3 { @apply bg-yellow-300 dark:bg-yellow-700; }
+    .bg-day-4 { @apply bg-lime-300 dark:bg-lime-700; }
+    .bg-day-5 { @apply bg-green-300 dark:bg-green-700; }
+    .bg-day-6 { @apply bg-emerald-300 dark:bg-emerald-700; }
+    .bg-day-7 { @apply bg-teal-300 dark:bg-teal-700; }
+    .bg-day-8 { @apply bg-cyan-300 dark:bg-cyan-700; }
+    .bg-day-9 { @apply bg-sky-300 dark:bg-sky-700; }
+    .bg-day-10 { @apply bg-blue-300 dark:bg-blue-700; }
+    .bg-day-11 { @apply bg-indigo-300 dark:bg-indigo-700; }
+    .bg-day-12 { @apply bg-violet-300 dark:bg-violet-700; }
+    .bg-day-13 { @apply bg-purple-300 dark:bg-purple-700; }
+    .bg-day-14 { @apply bg-fuchsia-300 dark:bg-fuchsia-700; }
+    .bg-day-15 { @apply bg-pink-300 dark:bg-pink-700; }
+    .bg-day-16 { @apply bg-rose-300 dark:bg-rose-700; }
+    .bg-clickable-day-0 { @apply bg-day-0 hover:bg-red-500; }
+    .bg-clickable-day-1 { @apply bg-day-1 hover:bg-orange-500; }
+    .bg-clickable-day-2 { @apply bg-day-2 hover:bg-amber-500; }
+    .bg-clickable-day-3 { @apply bg-day-3 hover:bg-yellow-500; }
+    .bg-clickable-day-4 { @apply bg-day-4 hover:bg-lime-500; }
+    .bg-clickable-day-5 { @apply bg-day-5 hover:bg-green-500; }
+    .bg-clickable-day-6 { @apply bg-day-6 hover:bg-emerald-500; }
+    .bg-clickable-day-7 { @apply bg-day-7 hover:bg-teal-500; }
+    .bg-clickable-day-8 { @apply bg-day-8 hover:bg-cyan-500; }
+    .bg-clickable-day-9 { @apply bg-day-9 hover:bg-sky-500; }
+    .bg-clickable-day-10 { @apply bg-day-10 hover:bg-blue-500; }
+    .bg-clickable-day-11 { @apply bg-day-11 hover:bg-indigo-500; }
+    .bg-clickable-day-12 { @apply bg-day-12 hover:bg-violet-500; }
+    .bg-clickable-day-13 { @apply bg-day-13 hover:bg-purple-500; }
+    .bg-clickable-day-14 { @apply bg-day-14 hover:bg-fuchsia-500; }
+    .bg-clickable-day-15 { @apply bg-day-15 hover:bg-pink-500; }
+    .bg-clickable-day-16 { @apply bg-day-16 hover:bg-rose-500; }
 }

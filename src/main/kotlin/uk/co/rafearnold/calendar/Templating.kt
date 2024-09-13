@@ -29,6 +29,7 @@ fun YearMonth.toCalendarModel(
                 opened = openedDays.contains(it),
                 disabled = atDay.isAfter(today) || atDay.isBefore(earliestDate),
                 showClickMeTooltip = showClickMeTooltip && atDay == today,
+                colorIndex = atDay.colorIndex,
             )
         }
     return object : CalendarBaseModel {
@@ -81,6 +82,7 @@ class DayViewModel(
     val text: String,
     val backLink: String,
     val dayOfMonth: Int,
+    val colorIndex: Int,
 ) : ViewModel {
     override fun template(): String = "day"
 }
@@ -108,9 +110,15 @@ interface PreviousDaysBaseModel {
     val includeNextPreviousDaysLinkOnDay: Int
 }
 
-data class DayModel(val link: String, val opened: Boolean, val disabled: Boolean, val showClickMeTooltip: Boolean)
+data class DayModel(
+    val link: String,
+    val opened: Boolean,
+    val disabled: Boolean,
+    val showClickMeTooltip: Boolean,
+    val colorIndex: Int,
+)
 
-data class PreviousDayModel(val date: String, val text: String)
+data class PreviousDayModel(val date: String, val text: String, val colorIndex: Int)
 
 class PebbleTemplateRenderer(
     private val engine: PebbleEngine =

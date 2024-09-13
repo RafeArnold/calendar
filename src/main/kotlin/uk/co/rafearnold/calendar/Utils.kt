@@ -16,6 +16,8 @@ fun Clock.now(): LocalDateTime = LocalDateTime.ofInstant(instant(), zone)
 
 fun LocalDate.toYearMonth(): YearMonth = YearMonth.from(this)
 
+val LocalDate.colorIndex: Int get() = (this.toEpochDay() % 17).toInt()
+
 private val random = SecureRandom()
 
 fun randomBytes(numBytes: Int): ByteArray = ByteArray(numBytes).apply { random.nextBytes(this) }
