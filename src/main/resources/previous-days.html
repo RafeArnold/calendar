@@ -5,7 +5,7 @@
     {% endif %}
     <div class="relative flex grow items-center justify-center text-center">
         <div data-testid="previous-day-date" class="absolute text-sm left-5 top-3">{{ previousDay.date }}</div>
-        <div data-testid="previous-day-text">{{ previousDay.text }}</div>
+        <div data-testid="previous-day-text" class="p-6 pt-10 sm:p-12 whitespace-pre-wrap">{{ previousDay.text | raw }}</div>
     </div>
 </div>
 {% endfor %}
