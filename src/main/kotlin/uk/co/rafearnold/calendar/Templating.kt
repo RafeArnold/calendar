@@ -120,10 +120,7 @@ data class DayModel(
 
 data class PreviousDayModel(val date: String, val text: String, val colorIndex: Int)
 
-class PebbleTemplateRenderer(
-    private val engine: PebbleEngine =
-        PebbleEngine.Builder().cacheActive(false).loader(FileLoader().apply { prefix = "src/main/resources" }).build(),
-) : TemplateRenderer {
+class PebbleTemplateRenderer(private val engine: PebbleEngine) : TemplateRenderer {
     override fun invoke(viewModel: ViewModel): String =
         try {
             val writer = StringWriter()

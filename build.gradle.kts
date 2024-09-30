@@ -25,7 +25,7 @@ application.mainClass = "uk.co.rafearnold.calendar.MainKt"
 
 tasks.run<JavaExec> {
     environment("DB_URL", "jdbc:sqlite:calendar.db")
-    environment("ASSET_DIRS", "src/main/resources/assets")
+    environment("ASSET_DIRS", "data/assets,src/main/resources/assets")
     environment("HOT_RELOADING", "true")
     environment("ENABLE_AUTH", "false")
     environment("EARLIEST_DATE", "2024-07-15")

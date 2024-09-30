@@ -18,23 +18,23 @@
     .day-other-month {
         @apply day-base bg-gray-700 dark:bg-gray-800 text-gray-400;
     }
-    .bg-day-0 { @apply bg-red-300 dark:bg-red-700; }
-    .bg-day-1 { @apply bg-orange-300 dark:bg-orange-700; }
-    .bg-day-2 { @apply bg-amber-300 dark:bg-amber-700; }
-    .bg-day-3 { @apply bg-yellow-300 dark:bg-yellow-700; }
-    .bg-day-4 { @apply bg-lime-300 dark:bg-lime-700; }
-    .bg-day-5 { @apply bg-green-300 dark:bg-green-700; }
-    .bg-day-6 { @apply bg-emerald-300 dark:bg-emerald-700; }
-    .bg-day-7 { @apply bg-teal-300 dark:bg-teal-700; }
-    .bg-day-8 { @apply bg-cyan-300 dark:bg-cyan-700; }
-    .bg-day-9 { @apply bg-sky-300 dark:bg-sky-700; }
-    .bg-day-10 { @apply bg-blue-300 dark:bg-blue-700; }
-    .bg-day-11 { @apply bg-indigo-300 dark:bg-indigo-700; }
-    .bg-day-12 { @apply bg-violet-300 dark:bg-violet-700; }
-    .bg-day-13 { @apply bg-purple-300 dark:bg-purple-700; }
-    .bg-day-14 { @apply bg-fuchsia-300 dark:bg-fuchsia-700; }
-    .bg-day-15 { @apply bg-pink-300 dark:bg-pink-700; }
-    .bg-day-16 { @apply bg-rose-300 dark:bg-rose-700; }
+    .bg-day-0 { @apply bg-gradient-to-br from-red-400 to-red-200 dark:from-red-700 dark:to-red-500; }
+    .bg-day-1 { @apply bg-gradient-to-br from-orange-400 to-orange-200 dark:from-orange-700 dark:to-orange-500; }
+    .bg-day-2 { @apply bg-gradient-to-br from-amber-400 to-amber-200 dark:from-amber-700 dark:to-amber-500; }
+    .bg-day-3 { @apply bg-gradient-to-br from-yellow-400 to-yellow-200 dark:from-yellow-700 dark:to-yellow-500; }
+    .bg-day-4 { @apply bg-gradient-to-br from-lime-400 to-lime-200 dark:from-lime-700 dark:to-lime-500; }
+    .bg-day-5 { @apply bg-gradient-to-br from-green-400 to-green-200 dark:from-green-700 dark:to-green-500; }
+    .bg-day-6 { @apply bg-gradient-to-br from-emerald-400 to-emerald-200 dark:from-emerald-700 dark:to-emerald-500; }
+    .bg-day-7 { @apply bg-gradient-to-br from-teal-400 to-teal-200 dark:from-teal-700 dark:to-teal-500; }
+    .bg-day-8 { @apply bg-gradient-to-br from-cyan-400 to-cyan-200 dark:from-cyan-700 dark:to-cyan-500; }
+    .bg-day-9 { @apply bg-gradient-to-br from-sky-400 to-sky-200 dark:from-sky-700 dark:to-sky-500; }
+    .bg-day-10 { @apply bg-gradient-to-br from-blue-400 to-blue-200 dark:from-blue-700 dark:to-blue-500; }
+    .bg-day-11 { @apply bg-gradient-to-br from-indigo-400 to-indigo-200 dark:from-indigo-700 dark:to-indigo-500; }
+    .bg-day-12 { @apply bg-gradient-to-br from-violet-400 to-violet-200 dark:from-violet-700 dark:to-violet-500; }
+    .bg-day-13 { @apply bg-gradient-to-br from-purple-400 to-purple-200 dark:from-purple-700 dark:to-purple-500; }
+    .bg-day-14 { @apply bg-gradient-to-br from-fuchsia-400 to-fuchsia-200 dark:from-fuchsia-700 dark:to-fuchsia-500; }
+    .bg-day-15 { @apply bg-gradient-to-br from-pink-400 to-pink-200 dark:from-pink-700 dark:to-pink-500; }
+    .bg-day-16 { @apply bg-gradient-to-br from-rose-400 to-rose-200 dark:from-rose-700 dark:to-rose-500; }
     .bg-clickable-day-0 { @apply bg-day-0 hover:bg-red-500; }
     .bg-clickable-day-1 { @apply bg-day-1 hover:bg-orange-500; }
     .bg-clickable-day-2 { @apply bg-day-2 hover:bg-amber-500; }

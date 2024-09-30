@@ -1,6 +1,6 @@
 <div class="m-2 aspect-[7/5] flex rounded-lg bg-day-{{ model.colorIndex }} border-2 border-black dark:border-white dark:text-white" style="view-transition-name: day-{{ model.dayOfMonth }}">
     <div class="relative flex grow items-center justify-center text-center">
-        <button data-testid="back" hx-get="{{ model.backLink }}" hx-target="#calendar-content" hx-swap="innerHTML transition:true" class="absolute text-xl left-5 top-3"><i class="fa-solid fa-arrow-left"></i></button>
-        <div data-testid="day-text">{{ model.text }}</div>
+        <button data-testid="back" hx-get="{{ model.backLink }}" hx-target="#calendar-content" hx-swap="innerHTML transition:true" class="absolute text-xl sm:text-2xl left-4 sm:left-6 top-2 sm:top-4"><i class="fa-solid fa-arrow-left"></i></button>
+        <div data-testid="day-text" class="p-4 sm:p-12 whitespace-pre-wrap">{{ model.text | raw }}</div>
     </div>
 </div>
