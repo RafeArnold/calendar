@@ -14,7 +14,7 @@ plugins {
     id("org.jmailen.kotlinter") version "4.4.1"
     id("com.github.node-gradle.node") version "7.0.2"
     id("org.flywaydb.flyway") version "10.17.3"
-    id("org.jooq.jooq-codegen-gradle") version "3.19.11"
+    id("org.jooq.jooq-codegen-gradle") version "3.19.13"
     id("com.github.johnrengelman.shadow") version "8.1.1"
     application
 }
