@@ -59,7 +59,7 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-params")
-    testImplementation("com.microsoft.playwright:playwright:1.47.0")
+    testImplementation("com.microsoft.playwright:playwright:1.48.0")
     testImplementation("org.wiremock:wiremock-jetty12:3.9.1")
     testImplementation("com.auth0:java-jwt:4.4.0")
     testImplementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
