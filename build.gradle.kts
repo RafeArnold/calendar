@@ -5,7 +5,7 @@ import java.nio.file.Path
 
 buildscript {
     dependencies {
-        classpath("org.xerial:sqlite-jdbc:3.46.1.3")
+        classpath("org.xerial:sqlite-jdbc:3.47.0.0")
     }
 }
 
@@ -49,7 +49,7 @@ dependencies {
 
     implementation("org.jooq:jooq:3.19.13")
     implementation("org.flywaydb:flyway-core:10.21.0")
-    implementation("org.xerial:sqlite-jdbc:3.46.1.3")
+    implementation("org.xerial:sqlite-jdbc:3.47.0.0")
 
     implementation("com.google.api-client:google-api-client:2.7.0")
 
