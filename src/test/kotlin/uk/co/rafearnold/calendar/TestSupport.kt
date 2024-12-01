@@ -36,6 +36,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAmount
 import java.util.Date
 import java.util.UUID
 import javax.crypto.Mac
@@ -56,6 +57,10 @@ fun LocalDate.toClock(): Clock = Clock.fixed(atTime(LocalTime.MIDNIGHT).toInstan
 fun LocalDateTime.toClock(): Clock = Clock.fixed(toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
 
 fun Clock.mutable() = MutableClock(this)
+
+fun MutableClock.fastForward(temporalAmount: TemporalAmount) {
+    del = Clock.fixed(instant().plus(temporalAmount), zone)
+}
 
 class MutableClock(var del: Clock) : Clock() {
     override fun instant(): Instant = del.instant()
@@ -97,7 +102,7 @@ class GoogleOAuthServer(
     private val clientId: String = UUID.randomUUID().toString(),
     private val clientSecret: String = UUID.randomUUID().toString(),
 ) : WireMockServer(0), AutoCloseable {
-    val certKeyPair: RsaKeyPair = generateRsaKeyPair()
+    private val certKeyPair: RsaKeyPair = generateRsaKeyPair()
 
     init {
         start()
