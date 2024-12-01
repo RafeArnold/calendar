@@ -21,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -1053,28 +1054,6 @@ class EndToEndTests {
     }
 
     @Test
-    fun `user is redirected when id token becomes invalid while using the calendar`() {
-        val now = LocalDateTime.of(2024, 8, 26, 15, 25, 30)
-        val clock = now.toClock().mutable()
-        GoogleOAuthServer(clock = clock).use { authServer ->
-            val userEmail = "test@gmail.com"
-            val auth = authServer.toAuthConfig(allowedUserEmails = listOf(userEmail))
-            server = startServer(clock = clock, auth = auth) { "whatever" }
-
-            val page = browser.newPage()
-            page.login(email = userEmail, authServer = authServer)
-            page.assertCurrentMonthIs(now.toYearMonth())
-            page.clickPreviousMonth()
-            page.assertCurrentMonthIs(now.minusMonths(1).toYearMonth())
-
-            clock.del = now.plusHours(2).toClock()
-
-            page.clickNextMonth()
-            page.assertIsOnAuthenticationPage(authServer)
-        }
-    }
-
-    @Test
     fun `clicking days with missing messages don't affected opened days`() {
         val now = LocalDate.of(2024, 8, 24)
         val messageLoader = MapBackedMessageLoader(mapOf(now to "test 1", now.minusDays(2) to "test 2"))
@@ -1249,6 +1228,43 @@ class EndToEndTests {
             page.reload()
             page.assertCurrentMonthIs(YearMonth.of(2024, 8))
             page.assertDaysHaveClickMeTooltip(emptyList(), YearMonth.of(2024, 8))
+        }
+    }
+
+    @Test
+    fun `user is logged out if no requests are received for awhile`() {
+        val startTime = LocalDateTime.of(2024, 12, 1, 15, 7, 32)
+        val clock = startTime.toClock().mutable()
+        GoogleOAuthServer(clock).use { authServer ->
+            val userEmail = "test@example.com"
+            server = startServer(clock = clock, auth = authServer.toAuthConfig(listOf(userEmail))) { "whatever" }
+
+            val page = browser.newPage()
+            page.login(email = userEmail, authServer = authServer)
+            page.assertCurrentMonthIs(startTime.toYearMonth())
+
+            clock.fastForward(Duration.ofDays(7))
+
+            page.clickPreviousMonth()
+            page.assertIsOnAuthenticationPage(authServer)
+
+            page.login(email = userEmail, authServer = authServer)
+            page.assertCurrentMonthIs(startTime.toYearMonth())
+
+            clock.fastForward(Duration.ofDays(7).minusMinutes(10))
+
+            page.clickPreviousMonth()
+            page.assertCurrentMonthIs(startTime.toYearMonth().minusMonths(1))
+
+            clock.fastForward(Duration.ofDays(7).minusMinutes(10))
+
+            page.clickToday()
+            page.assertCurrentMonthIs(startTime.toYearMonth())
+
+            clock.fastForward(Duration.ofDays(7))
+
+            page.clickPreviousMonth()
+            page.assertIsOnAuthenticationPage(authServer)
         }
     }
 

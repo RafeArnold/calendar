@@ -37,8 +37,12 @@ import org.http4k.server.Jetty
 import org.http4k.server.asServer
 import org.http4k.template.ViewModel
 import org.http4k.template.viewModel
+import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
+import org.jooq.impl.DataSourceConnectionProvider
+import org.jooq.impl.DefaultConfiguration
+import org.jooq.impl.ThreadLocalTransactionProvider
 import org.sqlite.SQLiteDataSource
 import java.net.URL
 import java.time.Clock
@@ -66,12 +70,13 @@ data class Config(
 interface AuthConfig {
     fun createHandlerFactory(
         userRepository: UserRepository,
+        sessions: Sessions,
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
     ): RoutingHandlerFactory
 
-    fun logoutHandler(): HttpHandler
+    fun logoutHandler(sessions: Sessions): HttpHandler
 
     companion object
 }
@@ -79,6 +84,7 @@ interface AuthConfig {
 data object NoAuth : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
+        sessions: Sessions,
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
@@ -87,7 +93,7 @@ data object NoAuth : AuthConfig {
             routes(*list).withFilter { next -> { next(userLens(User(0, "", ""), it)) } }
         }
 
-    override fun logoutHandler(): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
+    override fun logoutHandler(sessions: Sessions): HttpHandler = { _ -> Response(FOUND).header("location", "/") }
 }
 
 fun interface RoutingHandlerFactory {
@@ -97,9 +103,16 @@ fun interface RoutingHandlerFactory {
 fun Config.startServer(): Http4kServer {
     val dataSource = SQLiteDataSource().apply { url = dbUrl }
     migrateDb(dataSource)
-    val dbCtx = DSL.using(dataSource, SQLDialect.SQLITE)
+    val connectionProvider = DataSourceConnectionProvider(dataSource)
+    val configuration =
+        DefaultConfiguration()
+            .set(connectionProvider)
+            .set(SQLDialect.SQLITE)
+            .set(ThreadLocalTransactionProvider(connectionProvider))
+    val dbCtx = DSL.using(configuration)
     val userRepository = UserRepository(dbCtx)
     val daysRepository = DaysRepository(dbCtx, clock)
+    val sessions = Sessions(clock, SessionRepository(dbCtx))
 
     val templateRenderer = PebbleTemplateRenderer(PebbleEngineFactory.create(hotReloading = hotReloading))
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
@@ -119,7 +132,7 @@ fun Config.startServer(): Http4kServer {
     val router =
         routes(
             assetsRoute(assetLoader = assetLoader),
-            auth.createHandlerFactory(userRepository, userLens, clock, tokenHashKey)
+            auth.createHandlerFactory(userRepository, sessions, userLens, clock, tokenHashKey)
                 .routes(
                     routes(
                         indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper, earliestDate),
@@ -132,9 +145,11 @@ fun Config.startServer(): Http4kServer {
                         .withFilter(adminUserFilter(adminEmails = adminEmails, userLens = userLens)),
                 )
                 .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
-            logoutRoute(auth),
+            logoutRoute(auth.logoutHandler(sessions)),
             stopImpersonatingRoute(),
-        ).withFilter(forbiddenFilter)
+        )
+            .withFilter(transactionFilter(dbCtx))
+            .withFilter(forbiddenFilter)
             .withFilter(redirectFilter)
             .withFilter(errorFilter(view))
     val app =
@@ -281,8 +296,8 @@ fun previousDaysRoute(
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }
 
-fun logoutRoute(auth: AuthConfig): RoutingHttpHandler =
-    "/logout" bind GET to { auth.logoutHandler()(it).with(stopImpersonating) }
+fun logoutRoute(logoutHandler: HttpHandler): RoutingHttpHandler =
+    "/logout" bind GET to { logoutHandler(it).with(stopImpersonating) }
 
 class CalendarModelHelper(
     private val messageLoader: MessageLoader,
@@ -333,6 +348,9 @@ fun adminUserFilter(
         next(if (user.email in adminEmails) userLens(user.copy(isAdmin = true), request) else request)
     }
 }
+
+fun transactionFilter(dslContext: DSLContext): Filter =
+    Filter { next -> { request -> dslContext.transactionResult { _ -> next(request) } } }
 
 val forbiddenFilter: Filter =
     Filter { next ->

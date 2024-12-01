@@ -1,7 +1,6 @@
 package uk.co.rafearnold.calendar
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier
 import com.google.api.client.googleapis.auth.oauth2.GooglePublicKeysManager
 import com.google.api.client.http.GenericUrl
@@ -41,6 +40,7 @@ data class GoogleOauth(
 ) : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
+        sessions: Sessions,
         userLens: RequestContextLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
@@ -59,20 +59,20 @@ data class GoogleOauth(
                     allowedUserEmails = allowedUserEmails,
                 )
             routes(
-                GoogleOAuthCallback(oauth, userRepository),
-                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, userLens)),
+                GoogleOAuthCallback(oauth, userRepository, sessions),
+                routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, sessions, userLens)),
             )
         }
 
-    override fun logoutHandler(): HttpHandler = logoutHandler
+    override fun logoutHandler(sessions: Sessions): HttpHandler = handleLogout(sessions)
 
     companion object
 }
 
 val HOST = Header.required("host")
 
-private const val ID_TOKEN_COOKIE_NAME = "id_token"
-private val idTokenCookie = Cookies.optional(name = ID_TOKEN_COOKIE_NAME)
+private const val USER_SESSION_COOKIE_NAME = "user_session"
+private val userSessionCookie = Cookies.optional(name = USER_SESSION_COOKIE_NAME)
 
 private const val AUTH_CSRF_TOKEN_COOKIE_NAME = "auth_csrf_token"
 private val authCsrfTokenCookie = Cookies.optional(name = AUTH_CSRF_TOKEN_COOKIE_NAME)
@@ -80,30 +80,21 @@ private val authCsrfTokenCookie = Cookies.optional(name = AUTH_CSRF_TOKEN_COOKIE
 private class AuthenticateViaGoogle(
     private val oauth: OAuth,
     private val userRepository: UserRepository,
+    private val sessions: Sessions,
     private val user: RequestContextLens<User>,
 ) : Filter {
     override fun invoke(next: HttpHandler): HttpHandler =
         { request ->
-            val idToken =
-                idTokenCookie(request)?.let {
-                    runCatching { GoogleIdToken.parse(GsonFactory.getDefaultInstance(), it.value) }
-                        .getOrElse { throw ForbiddenException() }
-                }
             try {
-                if (idToken != null && idToken.verify(oauth.tokenVerifier)) {
-                    val user = userRepository.getByGoogleId(subjectId = idToken.payload.subject)
-                    if (user != null &&
-                        idToken.payload.email == user.email &&
-                        oauth.emailIsAllowed(email = idToken.payload.email)
-                    ) {
-                        next(user(user, request))
-                    } else {
-                        throw InvalidIdTokenException()
-                    }
+                val userSession = userSessionCookie(request)?.value ?: throw InvalidSessionException()
+                val userId = sessions.getUserIdBySession(session = userSession) ?: throw InvalidSessionException()
+                val user = userRepository.getByUserId(userId = userId) ?: throw InvalidSessionException()
+                if (oauth.emailIsAllowed(email = user.email)) {
+                    next(user(user, request))
                 } else {
-                    throw InvalidIdTokenException()
+                    throw InvalidSessionException()
                 }
-            } catch (e: InvalidIdTokenException) {
+            } catch (e: InvalidSessionException) {
                 val csrfToken = randomBytes(numBytes = 32)
                 val tokenHash = oauth.hashToken(token = csrfToken)
                 val authUrl =
@@ -131,7 +122,7 @@ private class AuthenticateViaGoogle(
         }
 }
 
-private class InvalidIdTokenException : RuntimeException()
+private class InvalidSessionException : RuntimeException()
 
 private val codeQuery = Query.optional("code")
 private val stateQuery = Query.optional("state")
@@ -141,6 +132,7 @@ private const val CALLBACK_PATH = "/oauth/code"
 private class GoogleOAuthCallback(
     private val oauth: OAuth,
     private val userRepository: UserRepository,
+    private val sessions: Sessions,
 ) : RoutingHttpHandler by CALLBACK_PATH bind GET to { request ->
         val state = stateQuery(request).decodeBase64()
         val csrfToken = authCsrfTokenCookie(request)?.value.decodeBase64()
@@ -150,13 +142,16 @@ private class GoogleOAuthCallback(
         val tokenResponse =
             oauth.authFlow.newTokenRequest(authCode).setRedirectUri(oauth.redirectUri(request)).execute()
         val idToken = tokenResponse.parseIdToken()
-        if (!oauth.emailIsAllowed(email = idToken.payload.email)) throw ForbiddenException()
-        userRepository.createUserIfNoneExists(email = idToken.payload.email, googleSubjectId = idToken.payload.subject)
+        val payload = idToken.payload
+        if (!oauth.emailIsAllowed(email = payload.email)) throw ForbiddenException()
+        val user = userRepository.createUserIfNoneExists(email = payload.email, googleSubjectId = payload.subject)
+        val userSession = sessions.createSession(userId = user.id)
+        userSessionCookie(request)?.let { sessions.deleteSession(session = it.value) }
         Response(Status.FOUND).header("location", "/")
             .cookie(
                 Cookie(
-                    name = ID_TOKEN_COOKIE_NAME,
-                    value = tokenResponse.idToken,
+                    name = USER_SESSION_COOKIE_NAME,
+                    value = userSession,
                     path = "/",
                     secure = true,
                     httpOnly = true,
@@ -173,9 +168,11 @@ private fun String?.decodeBase64(): ByteArray =
         throw ForbiddenException()
     }
 
-private val logoutHandler: HttpHandler = {
-    Response(Status.FOUND).header("location", "/").invalidateCookie(ID_TOKEN_COOKIE_NAME)
-}
+private fun handleLogout(sessions: Sessions): HttpHandler =
+    { request ->
+        userSessionCookie(request)?.let { sessions.deleteSession(session = it.value) }
+        Response(Status.FOUND).header("location", "/").invalidateCookie(USER_SESSION_COOKIE_NAME)
+    }
 
 private class OAuth(
     serverBaseUrl: URI?,
