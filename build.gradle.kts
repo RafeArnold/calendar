@@ -6,11 +6,12 @@ import java.nio.file.Path
 buildscript {
     dependencies {
         classpath("org.xerial:sqlite-jdbc:3.47.1.0")
+        classpath("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.0")
     }
 }
 
 plugins {
-    kotlin("jvm") version "2.0.21"
+    kotlin("jvm") version "2.1.0"
     id("org.jmailen.kotlinter") version "4.4.1"
     id("com.github.node-gradle.node") version "7.1.0"
     id("org.flywaydb.flyway") version "10.21.0"
