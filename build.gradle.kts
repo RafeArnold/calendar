@@ -52,7 +52,7 @@ dependencies {
     implementation("org.flywaydb:flyway-core:11.1.0")
     implementation("org.xerial:sqlite-jdbc:3.47.1.0")
 
-    implementation("com.google.api-client:google-api-client:2.7.0")
+    implementation("com.google.api-client:google-api-client:2.7.1")
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2")
 
