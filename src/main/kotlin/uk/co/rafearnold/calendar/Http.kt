@@ -62,6 +62,7 @@ data class Config(
     val adminEmails: List<String>,
     val tokenHashKeyBase64: String,
     val earliestDate: LocalDate,
+    val latestDate: LocalDate,
     val messageLoader: MessageLoader,
 ) {
     companion object
@@ -121,7 +122,7 @@ fun Config.startServer(): Http4kServer {
     val userLens = userLens(requestContexts)
     val impersonatedUserLens = impersonatedUserLens(requestContexts)
 
-    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository, earliestDate)
+    val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository, earliestDate, latestDate)
 
     val tokenHashKey = tokenHashKeyBase64.base64DecodedArray()
     val objectMapper = jacksonObjectMapper()
@@ -135,7 +136,15 @@ fun Config.startServer(): Http4kServer {
             auth.createHandlerFactory(userRepository, sessions, userLens, clock, tokenHashKey)
                 .routes(
                     routes(
-                        indexRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper, earliestDate),
+                        indexRoute(
+                            view = view,
+                            clock = clock,
+                            user = userLens,
+                            impersonatedUser = impersonatedUserLens,
+                            calendarModelHelper = calendarModelHelper,
+                            earliestDate = earliestDate,
+                            latestDate = latestDate,
+                        ),
                         daysRoute(view, clock, userLens, impersonatedUserLens, calendarModelHelper),
                         dayRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
                         previousDaysRoute(view, messageLoader, clock, daysRepository, userLens, impersonatedUserLens),
@@ -208,6 +217,7 @@ fun indexRoute(
     impersonatedUser: RequestContextLens<User?>,
     calendarModelHelper: CalendarModelHelper,
     earliestDate: LocalDate,
+    latestDate: LocalDate,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
         val now = clock.toDate().toYearMonth()
@@ -219,11 +229,13 @@ fun indexRoute(
         val impersonatedUser0 = impersonatedUser(request)
         val previousMonthLink =
             month.minusMonths(1).let { prev -> if (prev >= earliestDate.toYearMonth()) monthLink(prev) else null }
+        val nextMonthLink =
+            month.plusMonths(1).let { next -> if (next <= latestDate.toYearMonth()) monthLink(next) else null }
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
                 previousMonthLink = previousMonthLink,
-                nextMonthLink = monthLink(month.plusMonths(1)),
+                nextMonthLink = nextMonthLink,
                 todayLink = "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = month.year,
@@ -304,6 +316,7 @@ class CalendarModelHelper(
     private val clock: Clock,
     private val daysRepo: DaysRepository,
     private val earliestDate: LocalDate,
+    private val latestDate: LocalDate,
 ) {
     fun create(
         month: YearMonth,
@@ -318,6 +331,7 @@ class CalendarModelHelper(
             nextPreviousDaysLink = nextPreviousDaysLink,
             clock = clock,
             earliestDate = earliestDate,
+            latestDate = latestDate,
             showClickMeTooltip = !daysRepo.hasOpenedDays(user),
         )
     }
