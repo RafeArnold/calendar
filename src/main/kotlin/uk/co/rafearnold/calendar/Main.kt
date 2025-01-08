@@ -28,6 +28,7 @@ fun Config.Companion.fromEnv(env: Map<String, String>): Config {
         adminEmails = env["ADMIN_USERS"]?.split(" ") ?: emptyList(),
         tokenHashKeyBase64 = randomBytes(numBytes = 32).base64Encode(),
         earliestDate = LocalDate.parse(env.getValue("EARLIEST_DATE")),
+        latestDate = env["LATEST_DATE"]?.let { LocalDate.parse(it) } ?: LocalDate.MAX,
         messageLoader = AssetMessageLoader(assetLoader),
     )
 }

@@ -1268,6 +1268,35 @@ class EndToEndTests {
         }
     }
 
+    @Test
+    fun `latest open-able date can be configured`() {
+        val now = LocalDate.of(2024, 7, 24)
+        val latestDate = LocalDate.of(2024, 7, 13)
+        val message = "something sweet"
+        server = startServer(clock = now.toClock(), latestDate = latestDate) { message }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertDaysAreEnabled(1..13)
+        page.assertClosedDaysAre(14..31, YearMonth.of(2024, 7))
+        page.assertDaysAreDisabled(14..31)
+        assertThat(page.nextMonthButton()).not().isVisible()
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 6))
+        assertThat(page.nextMonthButton()).isVisible()
+        page.assertDaysAreEnabled(1..30)
+        page.clickDay(13)
+        page.assertThatDayTextIs(message)
+        page.clickBack()
+        page.clickNextMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertDaysAreEnabled(1..13)
+        page.assertClosedDaysAre(14..31, YearMonth.of(2024, 7))
+        page.assertDaysAreDisabled(14..31)
+        assertThat(page.nextMonthButton()).not().isVisible()
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
@@ -1302,6 +1331,7 @@ class EndToEndTests {
         auth: AuthConfig = NoAuth,
         adminEmails: List<String> = emptyList(),
         earliestDate: LocalDate = LocalDate.EPOCH,
+        latestDate: LocalDate = LocalDate.MAX,
         messageLoader: MessageLoader,
     ): Http4kServer =
         Config(
@@ -1314,6 +1344,7 @@ class EndToEndTests {
             adminEmails = adminEmails,
             tokenHashKeyBase64 = Random.nextBytes(32).base64Encode(),
             earliestDate = earliestDate,
+            latestDate = latestDate,
             messageLoader = messageLoader,
         ).startServer()
 }

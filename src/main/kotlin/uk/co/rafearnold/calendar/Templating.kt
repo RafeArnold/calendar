@@ -18,6 +18,7 @@ fun YearMonth.toCalendarModel(
     nextPreviousDaysLink: String,
     clock: Clock,
     earliestDate: LocalDate,
+    latestDate: LocalDate,
     showClickMeTooltip: Boolean,
 ): CalendarBaseModel {
     val today = clock.toDate()
@@ -27,7 +28,7 @@ fun YearMonth.toCalendarModel(
             DayModel(
                 link = "/day/" + atDay.format(DateTimeFormatter.ISO_LOCAL_DATE),
                 opened = openedDays.contains(it),
-                disabled = atDay.isAfter(today) || atDay.isBefore(earliestDate),
+                disabled = atDay.isAfter(today) || atDay.isBefore(earliestDate) || atDay.isAfter(latestDate),
                 showClickMeTooltip = showClickMeTooltip && atDay == today,
                 colorIndex = atDay.colorIndex,
             )
@@ -58,7 +59,7 @@ private fun YearMonth.nextMonthDays(): List<Int> {
 class HomeViewModel(
     val justCalendar: Boolean,
     val previousMonthLink: String?,
-    val nextMonthLink: String,
+    val nextMonthLink: String?,
     val todayLink: String,
     val month: String,
     val year: Int,

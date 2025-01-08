@@ -46,6 +46,7 @@ class ConfigTests {
                 "ALLOWED_USERS" to "$allowedEmail1 $allowedEmail2",
                 "ADMIN_USERS" to "$allowedEmail1 $adminEmail2",
                 "EARLIEST_DATE" to "2024-08-16",
+                "LATEST_DATE" to "2025-01-08",
             )
         val config = Config.fromEnv(env)
         assertEquals(port, config.port)
@@ -67,6 +68,7 @@ class ConfigTests {
         assertEquals(listOf(allowedEmail1, allowedEmail2), auth.allowedUserEmails)
         assertEquals(listOf(allowedEmail1, adminEmail2), config.adminEmails)
         assertEquals(LocalDate.of(2024, 8, 16), config.earliestDate)
+        assertEquals(LocalDate.of(2025, 1, 8), config.latestDate)
     }
 
     @Test
@@ -135,5 +137,10 @@ class ConfigTests {
     fun `earliest date is required`() {
         val exception = assertThrows<NoSuchElementException> { Config.fromEnv(noAuthEnv - "EARLIEST_DATE") }
         assertEquals("Key EARLIEST_DATE is missing in the map.", exception.message)
+    }
+
+    @Test
+    fun `latest date defaults to MAX`() {
+        assertEquals(LocalDate.MAX, Config.fromEnv(noAuthEnv - "LATEST_DATE").latestDate)
     }
 }
