@@ -63,7 +63,7 @@ dependencies {
     testImplementation("com.microsoft.playwright:playwright:1.49.0")
     testImplementation("org.wiremock:wiremock-jetty12:3.10.0")
     testImplementation("com.auth0:java-jwt:4.4.0")
-    testImplementation("org.bouncycastle:bcpkix-jdk18on:1.79")
+    testImplementation("org.bouncycastle:bcpkix-jdk18on:1.80")
 }
 
 val dbFile: Path = Files.createTempFile("calendar", ".db")
