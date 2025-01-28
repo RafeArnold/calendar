@@ -121,7 +121,7 @@ tasks.processResources {
 }
 
 task("buildCss", NpxTask::class) {
-    command = "tailwindcss"
+    command = "@tailwindcss/cli"
     args = listOf(
         "-i", "./src/main/resources/input.css",
         "-o", "./src/main/resources/assets/index.min.css",
