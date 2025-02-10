@@ -4,6 +4,18 @@
 
 @theme {
   --font-sans: Rubik, sans-serif;
+  --animate-bounce-right: bounce-right 1s infinite;
+
+  @keyframes bounce-right {
+    0%, to {
+      animation-timing-function: cubic-bezier(.8, 0, 1, 1);
+      transform: translateX(25%)
+    }
+    50% {
+      animation-timing-function: cubic-bezier(0, 0, .2, 1);
+      transform: none
+    }
+  }
 }
 
 /*
