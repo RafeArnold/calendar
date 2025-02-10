@@ -5,7 +5,7 @@
         {% if model.previousMonthLink %}<button data-testid="previous-month" hx-get="{{ model.previousMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="p-1"><i class="fa-solid fa-chevron-up text-xl dark:text-white"></i></button>{% endif %}
         {% if model.nextMonthLink %}<button data-testid="next-month" hx-get="{{ model.nextMonthLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="p-1 mr-1"><i class="fa-solid fa-chevron-down text-xl dark:text-white"></i></button>{% endif %}
     </div>
-    <div data-testid="calendar" class="w-full bg-gradient-to-br from-indigo-300 via-purple-400 to-pink-300 dark:from-indigo-800 dark:via-purple-700 dark:to-pink-800 rounded-2xl border-2 border-black dark:border-white shadow-2xl">
+    <div data-testid="calendar" class="w-full bg-linear-to-br from-indigo-300 via-purple-400 to-pink-300 dark:from-indigo-800 dark:via-purple-700 dark:to-pink-800 rounded-2xl border-2 border-black dark:border-white shadow-2xl">
         <div class="m-5 mb-0 border-2 border-black dark:border-white rounded-lg">
             <img data-testid="month-image" src="{{ model.monthImageLink }}" alt="calendar picture for the currently displayed month" class="rounded-md">
         </div>

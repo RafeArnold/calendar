@@ -1,55 +1,88 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-@layer components {
-    .day-base {
-        @apply aspect-square m-[12%] flex items-center justify-center bg-white border-2 border-black dark:border-gray-400 dark:text-white text-sm sm:text-2xl select-none;
+@source './*.{html,css}';
+
+@theme {
+  --font-sans: Rubik, sans-serif;
+  --animate-bounce-right: bounce-right 1s infinite;
+
+  @keyframes bounce-right {
+    0%, to {
+      animation-timing-function: cubic-bezier(.8, 0, 1, 1);
+      transform: translateX(25%)
     }
-    .day-opened {
-        @apply day-base bg-gray-400 hover:bg-gray-500 dark:bg-gray-500 dark:hover:bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
+    50% {
+      animation-timing-function: cubic-bezier(0, 0, .2, 1);
+      transform: none
     }
-    .day-closed {
-        @apply day-other-month;
-    }
-    .day-ready {
-        @apply day-base dark:border-gray-200;
-    }
-    .day-other-month {
-        @apply day-base bg-gray-700 dark:bg-gray-800 text-gray-400;
-    }
-    .bg-day-0 { @apply bg-gradient-to-br from-red-400 to-red-200 dark:from-red-700 dark:to-red-500; }
-    .bg-day-1 { @apply bg-gradient-to-br from-orange-400 to-orange-200 dark:from-orange-700 dark:to-orange-500; }
-    .bg-day-2 { @apply bg-gradient-to-br from-amber-400 to-amber-200 dark:from-amber-700 dark:to-amber-500; }
-    .bg-day-3 { @apply bg-gradient-to-br from-yellow-400 to-yellow-200 dark:from-yellow-700 dark:to-yellow-500; }
-    .bg-day-4 { @apply bg-gradient-to-br from-lime-400 to-lime-200 dark:from-lime-700 dark:to-lime-500; }
-    .bg-day-5 { @apply bg-gradient-to-br from-green-400 to-green-200 dark:from-green-700 dark:to-green-500; }
-    .bg-day-6 { @apply bg-gradient-to-br from-emerald-400 to-emerald-200 dark:from-emerald-700 dark:to-emerald-500; }
-    .bg-day-7 { @apply bg-gradient-to-br from-teal-400 to-teal-200 dark:from-teal-700 dark:to-teal-500; }
-    .bg-day-8 { @apply bg-gradient-to-br from-cyan-400 to-cyan-200 dark:from-cyan-700 dark:to-cyan-500; }
-    .bg-day-9 { @apply bg-gradient-to-br from-sky-400 to-sky-200 dark:from-sky-700 dark:to-sky-500; }
-    .bg-day-10 { @apply bg-gradient-to-br from-blue-400 to-blue-200 dark:from-blue-700 dark:to-blue-500; }
-    .bg-day-11 { @apply bg-gradient-to-br from-indigo-400 to-indigo-200 dark:from-indigo-700 dark:to-indigo-500; }
-    .bg-day-12 { @apply bg-gradient-to-br from-violet-400 to-violet-200 dark:from-violet-700 dark:to-violet-500; }
-    .bg-day-13 { @apply bg-gradient-to-br from-purple-400 to-purple-200 dark:from-purple-700 dark:to-purple-500; }
-    .bg-day-14 { @apply bg-gradient-to-br from-fuchsia-400 to-fuchsia-200 dark:from-fuchsia-700 dark:to-fuchsia-500; }
-    .bg-day-15 { @apply bg-gradient-to-br from-pink-400 to-pink-200 dark:from-pink-700 dark:to-pink-500; }
-    .bg-day-16 { @apply bg-gradient-to-br from-rose-400 to-rose-200 dark:from-rose-700 dark:to-rose-500; }
-    .bg-clickable-day-0 { @apply bg-day-0 hover:bg-red-500; }
-    .bg-clickable-day-1 { @apply bg-day-1 hover:bg-orange-500; }
-    .bg-clickable-day-2 { @apply bg-day-2 hover:bg-amber-500; }
-    .bg-clickable-day-3 { @apply bg-day-3 hover:bg-yellow-500; }
-    .bg-clickable-day-4 { @apply bg-day-4 hover:bg-lime-500; }
-    .bg-clickable-day-5 { @apply bg-day-5 hover:bg-green-500; }
-    .bg-clickable-day-6 { @apply bg-day-6 hover:bg-emerald-500; }
-    .bg-clickable-day-7 { @apply bg-day-7 hover:bg-teal-500; }
-    .bg-clickable-day-8 { @apply bg-day-8 hover:bg-cyan-500; }
-    .bg-clickable-day-9 { @apply bg-day-9 hover:bg-sky-500; }
-    .bg-clickable-day-10 { @apply bg-day-10 hover:bg-blue-500; }
-    .bg-clickable-day-11 { @apply bg-day-11 hover:bg-indigo-500; }
-    .bg-clickable-day-12 { @apply bg-day-12 hover:bg-violet-500; }
-    .bg-clickable-day-13 { @apply bg-day-13 hover:bg-purple-500; }
-    .bg-clickable-day-14 { @apply bg-day-14 hover:bg-fuchsia-500; }
-    .bg-clickable-day-15 { @apply bg-day-15 hover:bg-pink-500; }
-    .bg-clickable-day-16 { @apply bg-day-16 hover:bg-rose-500; }
+  }
 }
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+@utility day-base {
+  @apply aspect-square m-[12%] flex items-center justify-center bg-white border-2 border-black dark:border-gray-400 dark:text-white text-sm sm:text-2xl select-none;
+}
+@utility day-opened {
+  @apply day-base bg-gray-400 hover:bg-gray-500 dark:bg-gray-500 dark:hover:bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
+}
+@utility day-closed {
+  @apply day-other-month;
+}
+@utility day-ready {
+  @apply day-base dark:border-gray-200;
+}
+@utility day-other-month {
+  @apply day-base bg-gray-700 dark:bg-gray-800 text-gray-400;
+}
+
+@utility bg-day-0 { @apply bg-linear-to-br from-red-400 to-red-200 dark:from-red-700 dark:to-red-500; }
+@utility bg-day-1 { @apply bg-linear-to-br from-orange-400 to-orange-200 dark:from-orange-700 dark:to-orange-500; }
+@utility bg-day-2 { @apply bg-linear-to-br from-amber-400 to-amber-200 dark:from-amber-700 dark:to-amber-500; }
+@utility bg-day-3 { @apply bg-linear-to-br from-yellow-400 to-yellow-200 dark:from-yellow-700 dark:to-yellow-500; }
+@utility bg-day-4 { @apply bg-linear-to-br from-lime-400 to-lime-200 dark:from-lime-700 dark:to-lime-500; }
+@utility bg-day-5 { @apply bg-linear-to-br from-green-400 to-green-200 dark:from-green-700 dark:to-green-500; }
+@utility bg-day-6 { @apply bg-linear-to-br from-emerald-400 to-emerald-200 dark:from-emerald-700 dark:to-emerald-500; }
+@utility bg-day-7 { @apply bg-linear-to-br from-teal-400 to-teal-200 dark:from-teal-700 dark:to-teal-500; }
+@utility bg-day-8 { @apply bg-linear-to-br from-cyan-400 to-cyan-200 dark:from-cyan-700 dark:to-cyan-500; }
+@utility bg-day-9 { @apply bg-linear-to-br from-sky-400 to-sky-200 dark:from-sky-700 dark:to-sky-500; }
+@utility bg-day-10 { @apply bg-linear-to-br from-blue-400 to-blue-200 dark:from-blue-700 dark:to-blue-500; }
+@utility bg-day-11 { @apply bg-linear-to-br from-indigo-400 to-indigo-200 dark:from-indigo-700 dark:to-indigo-500; }
+@utility bg-day-12 { @apply bg-linear-to-br from-violet-400 to-violet-200 dark:from-violet-700 dark:to-violet-500; }
+@utility bg-day-13 { @apply bg-linear-to-br from-purple-400 to-purple-200 dark:from-purple-700 dark:to-purple-500; }
+@utility bg-day-14 { @apply bg-linear-to-br from-fuchsia-400 to-fuchsia-200 dark:from-fuchsia-700 dark:to-fuchsia-500; }
+@utility bg-day-15 { @apply bg-linear-to-br from-pink-400 to-pink-200 dark:from-pink-700 dark:to-pink-500; }
+@utility bg-day-16 { @apply bg-linear-to-br from-rose-400 to-rose-200 dark:from-rose-700 dark:to-rose-500; }
+@utility bg-clickable-day-0 { @apply bg-day-0 hover:bg-red-500; }
+@utility bg-clickable-day-1 { @apply bg-day-1 hover:bg-orange-500; }
+@utility bg-clickable-day-2 { @apply bg-day-2 hover:bg-amber-500; }
+@utility bg-clickable-day-3 { @apply bg-day-3 hover:bg-yellow-500; }
+@utility bg-clickable-day-4 { @apply bg-day-4 hover:bg-lime-500; }
+@utility bg-clickable-day-5 { @apply bg-day-5 hover:bg-green-500; }
+@utility bg-clickable-day-6 { @apply bg-day-6 hover:bg-emerald-500; }
+@utility bg-clickable-day-7 { @apply bg-day-7 hover:bg-teal-500; }
+@utility bg-clickable-day-8 { @apply bg-day-8 hover:bg-cyan-500; }
+@utility bg-clickable-day-9 { @apply bg-day-9 hover:bg-sky-500; }
+@utility bg-clickable-day-10 { @apply bg-day-10 hover:bg-blue-500; }
+@utility bg-clickable-day-11 { @apply bg-day-11 hover:bg-indigo-500; }
+@utility bg-clickable-day-12 { @apply bg-day-12 hover:bg-violet-500; }
+@utility bg-clickable-day-13 { @apply bg-day-13 hover:bg-purple-500; }
+@utility bg-clickable-day-14 { @apply bg-day-14 hover:bg-fuchsia-500; }
+@utility bg-clickable-day-15 { @apply bg-day-15 hover:bg-pink-500; }
+@utility bg-clickable-day-16 { @apply bg-day-16 hover:bg-rose-500; }
