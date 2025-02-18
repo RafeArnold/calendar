@@ -7,11 +7,9 @@ import org.http4k.base64Encode
 import org.http4k.core.Body
 import org.http4k.core.Filter
 import org.http4k.core.Method.POST
-import org.http4k.core.RequestContext
 import org.http4k.core.Response
 import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.OK
-import org.http4k.core.Store
 import org.http4k.core.cookie.Cookie
 import org.http4k.core.cookie.SameSite
 import org.http4k.core.cookie.cookie
@@ -20,8 +18,8 @@ import org.http4k.core.cookie.replaceCookie
 import org.http4k.core.with
 import org.http4k.lens.Cookies
 import org.http4k.lens.FormField
-import org.http4k.lens.RequestContextKey
-import org.http4k.lens.RequestContextLens
+import org.http4k.lens.RequestKey
+import org.http4k.lens.RequestLens
 import org.http4k.lens.Validator
 import org.http4k.lens.webForm
 import org.http4k.routing.RoutingHttpHandler
@@ -35,13 +33,12 @@ private val impersonationTokenCookie = Cookies.optional(name = IMPERSONATION_TOK
 private val emailToImpersonate = FormField.required("email")
 private val impersonateForm = Body.webForm(Validator.Strict, emailToImpersonate).toLens()
 
-fun impersonatedUserLens(contexts: Store<RequestContext>) =
-    RequestContextKey.optional<User>(contexts, name = "impersonated-user")
+fun impersonatedUserLens(): RequestLens<User?> = RequestKey.optional(name = "impersonated-user")
 
 fun impersonateRoute(
     clock: Clock,
     userRepository: UserRepository,
-    user: RequestContextLens<User>,
+    user: RequestLens<User>,
     tokens: ImpersonationTokens,
 ): RoutingHttpHandler =
     "/impersonate" bind POST to { request ->
@@ -81,8 +78,8 @@ fun stopImpersonatingRoute(): RoutingHttpHandler =
 
 fun impersonatedUserFilter(
     userRepository: UserRepository,
-    user: RequestContextLens<User>,
-    impersonatedUser: RequestContextLens<User?>,
+    user: RequestLens<User>,
+    impersonatedUser: RequestLens<User?>,
     tokens: ImpersonationTokens,
 ): Filter =
     Filter { next ->
