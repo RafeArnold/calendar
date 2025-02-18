@@ -22,7 +22,7 @@ import org.http4k.core.with
 import org.http4k.lens.Cookies
 import org.http4k.lens.Header
 import org.http4k.lens.Query
-import org.http4k.lens.RequestContextLens
+import org.http4k.lens.RequestLens
 import org.http4k.routing.RoutingHttpHandler
 import org.http4k.routing.bind
 import org.http4k.routing.routes
@@ -41,7 +41,7 @@ data class GoogleOauth(
     override fun createHandlerFactory(
         userRepository: UserRepository,
         sessions: Sessions,
-        userLens: RequestContextLens<User>,
+        userLens: RequestLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
     ): RoutingHandlerFactory =
@@ -59,7 +59,7 @@ data class GoogleOauth(
                     allowedUserEmails = allowedUserEmails,
                 )
             routes(
-                GoogleOAuthCallback(oauth, userRepository, sessions),
+                googleOAuthCallback(oauth, userRepository, sessions),
                 routes(*list).withFilter(AuthenticateViaGoogle(oauth, userRepository, sessions, userLens)),
             )
         }
@@ -81,7 +81,7 @@ private class AuthenticateViaGoogle(
     private val oauth: OAuth,
     private val userRepository: UserRepository,
     private val sessions: Sessions,
-    private val user: RequestContextLens<User>,
+    private val user: RequestLens<User>,
 ) : Filter {
     override fun invoke(next: HttpHandler): HttpHandler =
         { request ->
@@ -129,11 +129,12 @@ private val stateQuery = Query.optional("state")
 
 private const val CALLBACK_PATH = "/oauth/code"
 
-private class GoogleOAuthCallback(
-    private val oauth: OAuth,
-    private val userRepository: UserRepository,
-    private val sessions: Sessions,
-) : RoutingHttpHandler by CALLBACK_PATH bind GET to { request ->
+private fun googleOAuthCallback(
+    oauth: OAuth,
+    userRepository: UserRepository,
+    sessions: Sessions,
+): RoutingHttpHandler =
+    CALLBACK_PATH bind GET to { request ->
         val state = stateQuery(request).decodeBase64()
         val csrfToken = authCsrfTokenCookie(request)?.value.decodeBase64()
         val expectedHash = oauth.hashToken(token = csrfToken)

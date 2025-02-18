@@ -8,22 +8,18 @@ import org.http4k.core.ContentType
 import org.http4k.core.Filter
 import org.http4k.core.HttpHandler
 import org.http4k.core.Method.GET
-import org.http4k.core.RequestContext
-import org.http4k.core.RequestContexts
 import org.http4k.core.Response
 import org.http4k.core.Status
 import org.http4k.core.Status.Companion.FORBIDDEN
 import org.http4k.core.Status.Companion.FOUND
 import org.http4k.core.Status.Companion.OK
-import org.http4k.core.Store
 import org.http4k.core.then
 import org.http4k.core.with
-import org.http4k.filter.ServerFilters
 import org.http4k.lens.BiDiBodyLens
 import org.http4k.lens.Path
 import org.http4k.lens.Query
-import org.http4k.lens.RequestContextKey
-import org.http4k.lens.RequestContextLens
+import org.http4k.lens.RequestKey
+import org.http4k.lens.RequestLens
 import org.http4k.lens.StringBiDiMappings
 import org.http4k.lens.localDate
 import org.http4k.lens.map
@@ -72,7 +68,7 @@ interface AuthConfig {
     fun createHandlerFactory(
         userRepository: UserRepository,
         sessions: Sessions,
-        userLens: RequestContextLens<User>,
+        userLens: RequestLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
     ): RoutingHandlerFactory
@@ -86,7 +82,7 @@ data object NoAuth : AuthConfig {
     override fun createHandlerFactory(
         userRepository: UserRepository,
         sessions: Sessions,
-        userLens: RequestContextLens<User>,
+        userLens: RequestLens<User>,
         clock: Clock,
         tokenHashKey: ByteArray,
     ): RoutingHandlerFactory =
@@ -118,9 +114,8 @@ fun Config.startServer(): Http4kServer {
     val templateRenderer = PebbleTemplateRenderer(PebbleEngineFactory.create(hotReloading = hotReloading))
     val view: BiDiBodyLens<ViewModel> = Body.viewModel(templateRenderer, ContentType.TEXT_HTML).toLens()
 
-    val requestContexts = RequestContexts()
-    val userLens = userLens(requestContexts)
-    val impersonatedUserLens = impersonatedUserLens(requestContexts)
+    val userLens = userLens()
+    val impersonatedUserLens = impersonatedUserLens()
 
     val calendarModelHelper = CalendarModelHelper(messageLoader, clock, daysRepository, earliestDate, latestDate)
 
@@ -152,8 +147,7 @@ fun Config.startServer(): Http4kServer {
                     )
                         .withFilter(impersonatedFilter)
                         .withFilter(adminUserFilter(adminEmails = adminEmails, userLens = userLens)),
-                )
-                .withFilter(ServerFilters.InitialiseRequestContext(requestContexts)),
+                ),
             logoutRoute(auth.logoutHandler(sessions)),
             stopImpersonatingRoute(),
         )
@@ -201,8 +195,7 @@ class ChainResourceLoader(private val loaders: List<ResourceLoader>) : ResourceL
     }
 }
 
-private fun userLens(contexts: Store<RequestContext>): RequestContextLens<User> =
-    RequestContextKey.required(contexts, name = "user")
+private fun userLens(): RequestLens<User> = RequestKey.required(name = "user")
 
 val monthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
 
@@ -213,8 +206,8 @@ val previousDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("eee,
 fun indexRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
-    user: RequestContextLens<User>,
-    impersonatedUser: RequestContextLens<User?>,
+    user: RequestLens<User>,
+    impersonatedUser: RequestLens<User?>,
     calendarModelHelper: CalendarModelHelper,
     earliestDate: LocalDate,
     latestDate: LocalDate,
@@ -250,8 +243,8 @@ fun indexRoute(
 fun daysRoute(
     view: BiDiBodyLens<ViewModel>,
     clock: Clock,
-    user: RequestContextLens<User>,
-    impersonatedUser: RequestContextLens<User?>,
+    user: RequestLens<User>,
+    impersonatedUser: RequestLens<User?>,
     calendarModelHelper: CalendarModelHelper,
 ): RoutingHttpHandler =
     "/days" bind GET to { request ->
@@ -265,8 +258,8 @@ fun dayRoute(
     messageLoader: MessageLoader,
     clock: Clock,
     daysRepo: DaysRepository,
-    user: RequestContextLens<User>,
-    impersonatedUser: RequestContextLens<User?>,
+    user: RequestLens<User>,
+    impersonatedUser: RequestLens<User?>,
 ): RoutingHttpHandler =
     "/day/{date}" bind GET to {
         val date = Path.localDate(DateTimeFormatter.ISO_LOCAL_DATE).of("date")(it)
@@ -291,8 +284,8 @@ fun previousDaysRoute(
     messageLoader: MessageLoader,
     clock: Clock,
     daysRepo: DaysRepository,
-    user: RequestContextLens<User>,
-    impersonatedUser: RequestContextLens<User?>,
+    user: RequestLens<User>,
+    impersonatedUser: RequestLens<User?>,
 ): RoutingHttpHandler =
     "/previous-days" bind GET to { request ->
         val from = previousDaysFromQuery(request) ?: clock.toDate()
@@ -355,7 +348,7 @@ private fun previousDaysLink(from: LocalDate?) =
 
 fun adminUserFilter(
     adminEmails: List<String>,
-    userLens: RequestContextLens<User>,
+    userLens: RequestLens<User>,
 ) = Filter { next ->
     { request ->
         val user = userLens(request)
