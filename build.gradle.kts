@@ -48,7 +48,7 @@ dependencies {
 
     implementation("io.pebbletemplates:pebble:3.2.3")
 
-    implementation("org.jooq:jooq:3.20.1")
+    implementation("org.jooq:jooq:3.20.2")
     implementation("org.flywaydb:flyway-core:11.3.4")
     implementation("org.xerial:sqlite-jdbc:3.49.1.0")
 
