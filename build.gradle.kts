@@ -6,7 +6,7 @@ import java.nio.file.Path
 buildscript {
     dependencies {
         classpath("org.xerial:sqlite-jdbc:3.49.1.0")
-        classpath("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.10")
+        classpath("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.20")
     }
 }
 
