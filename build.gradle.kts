@@ -6,7 +6,6 @@ import java.nio.file.Path
 buildscript {
     dependencies {
         classpath("org.xerial:sqlite-jdbc:3.49.1.0")
-        classpath("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.10")
     }
 }
 
@@ -127,5 +126,7 @@ task("buildCss", NpxTask::class) {
         "-o", "./src/main/resources/assets/index.min.css",
         "-m",
     )
+    inputs.dir("./src/main/resources")
+    outputs.dir("./src/main/resources/index.min.css")
     dependsOn("npmInstall")
 }
