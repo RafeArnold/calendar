@@ -11,7 +11,7 @@ buildscript {
 
 plugins {
     kotlin("jvm") version "2.1.21"
-    id("org.jmailen.kotlinter") version "5.1.0"
+    id("org.jmailen.kotlinter") version "5.1.1"
     id("com.github.node-gradle.node") version "7.1.0"
     id("org.flywaydb.flyway") version "11.9.1"
     id("org.jooq.jooq-codegen-gradle") version "3.20.4"
