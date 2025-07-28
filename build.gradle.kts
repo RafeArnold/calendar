@@ -53,7 +53,7 @@ dependencies {
 
     implementation("com.google.api-client:google-api-client:2.8.0")
 
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.19.1")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.19.2")
 
     implementation("ch.qos.logback:logback-classic:1.5.18")
 
