@@ -1054,38 +1054,6 @@ class EndToEndTests {
     }
 
     @Test
-    fun `clicking days with missing messages don't affected opened days`() {
-        val now = LocalDate.of(2024, 8, 24)
-        val messageLoader = MapBackedMessageLoader(mapOf(now to "test 1", now.minusDays(2) to "test 2"))
-        server = startServer(clock = now.toClock(), messageLoader = messageLoader)
-
-        val page = browser.newPage()
-        page.navigateHome(port = server.port(), now.toYearMonth())
-        page.assertCurrentMonthIs(now.toYearMonth())
-        page.clickDay(24)
-        page.assertThatDayTextIs("test 1")
-        page.clickBack()
-        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
-
-        page.day(23).click()
-        assertThat(page.dayText()).not().isVisible()
-        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
-        page.reload()
-        page.assertOpenedDaysAre(listOf(24), now.toYearMonth())
-
-        page.clickDay(22)
-        page.assertThatDayTextIs("test 2")
-        page.clickBack()
-        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
-
-        page.day(21).click()
-        assertThat(page.dayText()).not().isVisible()
-        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
-        page.reload()
-        page.assertOpenedDaysAre(listOf(22, 24), now.toYearMonth())
-    }
-
-    @Test
     fun `future months cannot be navigated to`() {
         val now = LocalDate.of(2024, 8, 24)
         server = startServer(clock = now.toClock()) { "whatever" }
@@ -1136,8 +1104,8 @@ class EndToEndTests {
     @Test
     fun `error is shown when day text is not available`() {
         val now = LocalDate.of(2024, 8, 24)
-        val messageLoader = MapBackedMessageLoader(messages = mapOf(now.minusDays(1) to "test 1"))
-        server = startServer(clock = now.toClock(), messageLoader = messageLoader)
+        var message: String? = "test 1"
+        server = startServer(clock = now.toClock()) { message }
 
         val page = browser.newPage()
         page.clock().install()
@@ -1149,6 +1117,7 @@ class EndToEndTests {
         page.clickBack()
         page.assertErrorIsNotDisplayed()
 
+        message = null
         page.day(22).click()
         assertThat(page.dayText()).not().isVisible()
         val expectedError = "error loading message"
@@ -1311,6 +1280,41 @@ class EndToEndTests {
         page.assertDaysAreDisabled(14..31)
         assertThat(page.nextMonthButton()).not().isVisible()
         assertThat(page.todayButton()).not().isVisible()
+    }
+
+    @Test
+    fun `days without a message are disabled`() {
+        val message1 = "this is the first message"
+        val message2 = "this is another message"
+        val message3 = "this one is different"
+        val message4 = "and another one"
+        val messageLoader =
+            MapBackedMessageLoader(
+                mapOf(
+                    LocalDate.of(2024, 8, 1) to message1,
+                    LocalDate.of(2024, 8, 14) to message2,
+                    LocalDate.of(2024, 8, 26) to message3,
+                    LocalDate.of(2024, 6, 3) to message4,
+                ),
+            )
+        val now = LocalDate.of(2024, 8, 28)
+        server = startServer(clock = now.toClock(), messageLoader = messageLoader)
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 8))
+        page.assertDaysAreEnabled(listOf(1, 14, 26))
+        page.assertClosedDaysAre((1..31) - listOf(1, 14, 26), YearMonth.of(2024, 8))
+        page.assertDaysAreDisabled((1..31) - listOf(1, 14, 26))
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertClosedDaysAre(1..31, YearMonth.of(2024, 7))
+        page.assertDaysAreDisabled(1..31)
+        page.clickPreviousMonth()
+        page.assertCurrentMonthIs(YearMonth.of(2024, 6))
+        page.assertDaysAreEnabled(listOf(3))
+        page.assertClosedDaysAre((1..30) - listOf(3), YearMonth.of(2024, 6))
+        page.assertDaysAreDisabled((1..30) - listOf(3))
     }
 
     private fun Page.login(

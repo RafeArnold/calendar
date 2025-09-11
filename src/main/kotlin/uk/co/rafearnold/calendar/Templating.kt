@@ -7,28 +7,25 @@ import io.pebbletemplates.pebble.loader.FileLoader
 import org.http4k.template.TemplateRenderer
 import org.http4k.template.ViewModel
 import java.io.StringWriter
-import java.time.Clock
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 fun YearMonth.toCalendarModel(
-    openedDays: List<Int>,
+    dayStates: List<DayState>,
     previousDays: List<PreviousDayModel>,
     nextPreviousDaysLink: String,
-    clock: Clock,
-    earliestDate: LocalDate,
-    latestDate: LocalDate,
+    today: LocalDate,
     showClickMeTooltip: Boolean,
 ): CalendarBaseModel {
-    val today = clock.toDate()
     val days =
         (1..lengthOfMonth()).map {
             val atDay = atDay(it)
+            val dayState = dayStates[it - 1]
             DayModel(
                 link = "/day/" + atDay.format(DateTimeFormatter.ISO_LOCAL_DATE),
-                opened = openedDays.contains(it),
-                disabled = atDay.isAfter(today) || atDay.isBefore(earliestDate) || atDay.isAfter(latestDate),
+                opened = dayState == DayState.OPENED,
+                disabled = dayState == DayState.DISABLED,
                 showClickMeTooltip = showClickMeTooltip && atDay == today,
                 colorIndex = atDay.colorIndex,
             )
@@ -53,6 +50,12 @@ private fun YearMonth.previousMonthDays(): List<Int> {
 private fun YearMonth.nextMonthDays(): List<Int> {
     val nextMonthDaysCount = 7 - atDay(lengthOfMonth()).dayOfWeek.value
     return (1..nextMonthDaysCount).toList()
+}
+
+enum class DayState {
+    OPENED,
+    UNOPENED,
+    DISABLED,
 }
 
 @Suppress("unused")

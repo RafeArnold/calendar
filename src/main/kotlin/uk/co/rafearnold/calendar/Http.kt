@@ -322,16 +322,25 @@ class CalendarModelHelper(
         month: YearMonth,
         user: User,
     ): CalendarBaseModel {
+        val today = clock.toDate()
         val openedDays = daysRepo.getOpenedDaysOfMonth(user, month)
-        val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = clock.toDate(), limit = 20)
+        val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = today, limit = 20)
         val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        val dayStates =
+            (1..month.lengthOfMonth()).map {
+                val atDay = month.atDay(it)
+                when {
+                    openedDays.contains(it) -> DayState.OPENED
+                    atDay > today || atDay > latestDate || atDay < earliestDate ||
+                        messageLoader[atDay] == null -> DayState.DISABLED
+                    else -> DayState.UNOPENED
+                }
+            }
         return month.toCalendarModel(
-            openedDays = openedDays,
+            dayStates = dayStates,
             previousDays = previousDays.toPreviousDayModels(messageLoader),
             nextPreviousDaysLink = nextPreviousDaysLink,
-            clock = clock,
-            earliestDate = earliestDate,
-            latestDate = latestDate,
+            today = today,
             showClickMeTooltip = !daysRepo.hasOpenedDays(user),
         )
     }
