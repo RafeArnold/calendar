@@ -855,6 +855,57 @@ class HttpTests {
         assertEquals("", response4.body())
     }
 
+    @Test
+    fun `months after latest date cannot be navigated to`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val latestDate = LocalDate.of(2024, 7, 13)
+        server = startServer(clock = now.toClock(), latestDate = latestDate)
+
+        fun getRequest(path: String): HttpRequest.Builder = HttpRequest.newBuilder(server.uri(path)).GET()
+
+        fun monthRequest(month: YearMonth): HttpRequest.Builder = getRequest("/?month=$month")
+
+        @Suppress("UastIncorrectHttpHeaderInspection")
+        fun HttpRequest.Builder.addHtmxHeader(): HttpRequest.Builder = header("hx-request", "true")
+
+        val response1 = httpClient.send(monthRequest(now.minusMonths(1).toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(200, response1.statusCode())
+
+        val response2 = httpClient.send(monthRequest(now.toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(302, response2.statusCode())
+        assertEquals(listOf("/?month=${latestDate.toYearMonth()}"), response2.headers().allValues("location"))
+        assertEquals("", response2.body())
+
+        val response3 = httpClient.send(monthRequest(now.plusMonths(1).toYearMonth()).build(), BodyHandlers.ofString())
+        assertEquals(302, response3.statusCode())
+        assertEquals(listOf("/?month=${latestDate.toYearMonth()}"), response3.headers().allValues("location"))
+        assertEquals("", response3.body())
+
+        val response4 = httpClient.send(getRequest("/").build(), BodyHandlers.ofString())
+        assertEquals(302, response4.statusCode())
+        assertEquals(listOf("/?month=${latestDate.toYearMonth()}"), response4.headers().allValues("location"))
+        assertEquals("", response4.body())
+
+        val request5 = monthRequest(now.minusMonths(1).toYearMonth()).addHtmxHeader().build()
+        val response5 = httpClient.send(request5, BodyHandlers.ofString())
+        assertEquals(200, response5.statusCode())
+
+        val request6 = monthRequest(now.toYearMonth()).addHtmxHeader().build()
+        val response6 = httpClient.send(request6, BodyHandlers.ofString())
+        assertEquals(403, response6.statusCode())
+        assertEquals("", response6.body())
+
+        val request7 = monthRequest(now.plusMonths(1).toYearMonth()).addHtmxHeader().build()
+        val response7 = httpClient.send(request7, BodyHandlers.ofString())
+        assertEquals(403, response7.statusCode())
+        assertEquals("", response7.body())
+
+        val request8 = getRequest("/").addHtmxHeader().build()
+        val response8 = httpClient.send(request8, BodyHandlers.ofString())
+        assertEquals(403, response8.statusCode())
+        assertEquals("", response8.body())
+    }
+
     private fun getDay(day: LocalDate): HttpResponse<String> =
         httpClient.send(HttpRequest.newBuilder(server.dayUri(day)).GET().build(), BodyHandlers.ofString())
 
@@ -945,6 +996,7 @@ class HttpTests {
         assetLoader: ResourceLoader = ResourceLoader.Classpath(basePackagePath = "/assets"),
         adminEmails: List<String> = emptyList(),
         tokenHashKey: ByteArray = Random.nextBytes(ByteArray(32)),
+        latestDate: LocalDate = LocalDate.MAX,
     ): Http4kServer =
         Config(
             port = 0,
@@ -956,7 +1008,7 @@ class HttpTests {
             adminEmails = adminEmails,
             tokenHashKeyBase64 = tokenHashKey.base64Encode(),
             earliestDate = LocalDate.EPOCH,
-            latestDate = LocalDate.MAX,
+            latestDate = latestDate,
         ) { "whatever" }.startServer()
 
     private fun googleOauth(

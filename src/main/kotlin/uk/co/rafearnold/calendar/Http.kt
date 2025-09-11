@@ -213,23 +213,30 @@ fun indexRoute(
     latestDate: LocalDate,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
+        val earliestMonth = earliestDate.toYearMonth()
+        val latestMonth = latestDate.toYearMonth()
         val now = clock.toDate().toYearMonth()
         val month = monthQuery(request) ?: now
         val user0 = user(request)
-        if (now < month && !user0.isAdmin) {
-            if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
+        if (month > minOf(now, latestMonth) && !user0.isAdmin) {
+            if (!request.isHtmx()) {
+                val location = if (month > latestMonth) monthLink(latestMonth) else "/"
+                throw RedirectException(redirectLocation = location)
+            } else {
+                throw ForbiddenException()
+            }
         }
         val impersonatedUser0 = impersonatedUser(request)
         val previousMonthLink =
-            month.minusMonths(1).let { prev -> if (prev >= earliestDate.toYearMonth()) monthLink(prev) else null }
+            month.minusMonths(1).let { prev -> if (prev >= earliestMonth) monthLink(prev) else null }
         val nextMonthLink =
-            month.plusMonths(1).let { next -> if (next <= latestDate.toYearMonth()) monthLink(next) else null }
+            month.plusMonths(1).let { next -> if (next <= latestMonth) monthLink(next) else null }
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
                 previousMonthLink = previousMonthLink,
                 nextMonthLink = nextMonthLink,
-                todayLink = "/",
+                todayLink = if (now > latestMonth) null else "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = month.year,
                 monthImageLink = monthImageLink(month),
@@ -315,16 +322,25 @@ class CalendarModelHelper(
         month: YearMonth,
         user: User,
     ): CalendarBaseModel {
+        val today = clock.toDate()
         val openedDays = daysRepo.getOpenedDaysOfMonth(user, month)
-        val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = clock.toDate(), limit = 20)
+        val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = today, limit = 20)
         val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        val dayStates =
+            (1..month.lengthOfMonth()).map {
+                val atDay = month.atDay(it)
+                when {
+                    openedDays.contains(it) -> DayState.OPENED
+                    atDay > today || atDay > latestDate || atDay < earliestDate ||
+                        messageLoader[atDay] == null -> DayState.DISABLED
+                    else -> DayState.UNOPENED
+                }
+            }
         return month.toCalendarModel(
-            openedDays = openedDays,
+            dayStates = dayStates,
             previousDays = previousDays.toPreviousDayModels(messageLoader),
             nextPreviousDaysLink = nextPreviousDaysLink,
-            clock = clock,
-            earliestDate = earliestDate,
-            latestDate = latestDate,
+            today = today,
             showClickMeTooltip = !daysRepo.hasOpenedDays(user),
         )
     }
