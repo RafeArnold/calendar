@@ -60,7 +60,7 @@ class HomeViewModel(
     val justCalendar: Boolean,
     val previousMonthLink: String?,
     val nextMonthLink: String?,
-    val todayLink: String,
+    val todayLink: String?,
     val month: String,
     val year: Int,
     val monthImageLink: String,

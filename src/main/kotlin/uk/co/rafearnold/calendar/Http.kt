@@ -213,23 +213,30 @@ fun indexRoute(
     latestDate: LocalDate,
 ): RoutingHttpHandler =
     "/" bind GET to { request ->
+        val earliestMonth = earliestDate.toYearMonth()
+        val latestMonth = latestDate.toYearMonth()
         val now = clock.toDate().toYearMonth()
         val month = monthQuery(request) ?: now
         val user0 = user(request)
-        if (now < month && !user0.isAdmin) {
-            if (!request.isHtmx()) throw RedirectException(redirectLocation = "/") else throw ForbiddenException()
+        if (month > minOf(now, latestMonth) && !user0.isAdmin) {
+            if (!request.isHtmx()) {
+                val location = if (month > latestMonth) monthLink(latestMonth) else "/"
+                throw RedirectException(redirectLocation = location)
+            } else {
+                throw ForbiddenException()
+            }
         }
         val impersonatedUser0 = impersonatedUser(request)
         val previousMonthLink =
-            month.minusMonths(1).let { prev -> if (prev >= earliestDate.toYearMonth()) monthLink(prev) else null }
+            month.minusMonths(1).let { prev -> if (prev >= earliestMonth) monthLink(prev) else null }
         val nextMonthLink =
-            month.plusMonths(1).let { next -> if (next <= latestDate.toYearMonth()) monthLink(next) else null }
+            month.plusMonths(1).let { next -> if (next <= latestMonth) monthLink(next) else null }
         val viewModel =
             HomeViewModel(
                 justCalendar = request.isHtmx(),
                 previousMonthLink = previousMonthLink,
                 nextMonthLink = nextMonthLink,
-                todayLink = "/",
+                todayLink = if (now > latestMonth) null else "/",
                 month = month.month.getDisplayName(TextStyle.FULL_STANDALONE, Locale.UK),
                 year = month.year,
                 monthImageLink = monthImageLink(month),

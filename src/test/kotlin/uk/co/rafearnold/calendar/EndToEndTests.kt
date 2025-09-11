@@ -1297,6 +1297,22 @@ class EndToEndTests {
         assertThat(page.nextMonthButton()).not().isVisible()
     }
 
+    @Test
+    fun `when now is later than latest open-able month the default home shows latest open-able month`() {
+        val now = LocalDate.of(2024, 8, 24)
+        val latestDate = LocalDate.of(2024, 7, 13)
+        server = startServer(clock = now.toClock(), latestDate = latestDate) { "whatever" }
+
+        val page = browser.newPage()
+        page.navigateHome(port = server.port())
+        page.assertCurrentMonthIs(YearMonth.of(2024, 7))
+        page.assertDaysAreEnabled(1..13)
+        page.assertClosedDaysAre(14..31, YearMonth.of(2024, 7))
+        page.assertDaysAreDisabled(14..31)
+        assertThat(page.nextMonthButton()).not().isVisible()
+        assertThat(page.todayButton()).not().isVisible()
+    }
+
     private fun Page.login(
         email: String,
         googleSubjectId: String = UUID.randomUUID().toString(),
