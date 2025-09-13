@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
 @source './*.{html,css}';
+@source inline("{bg-clickable-,bg-,}day-{0..16}");
 
 @theme {
   --font-sans: Rubik, sans-serif;
@@ -37,7 +38,7 @@
 }
 
 @utility day-base {
-  @apply aspect-square m-[12%] flex items-center justify-center bg-white border-2 border-black dark:border-gray-400 dark:text-white text-sm sm:text-2xl select-none;
+  @apply aspect-square m-[12%] flex items-center justify-center border-2 border-black dark:border-gray-400 dark:text-white text-sm sm:text-2xl select-none;
 }
 @utility day-opened {
   @apply day-base bg-gray-400 hover:bg-gray-500 dark:bg-gray-500 dark:hover:bg-gray-400 shadow-[inset_0_2px_4px_0_rgb(0_0_0_/_0.4)];
@@ -69,20 +70,21 @@
 @utility bg-day-14 { @apply bg-linear-to-br from-fuchsia-400 to-fuchsia-200 dark:from-fuchsia-700 dark:to-fuchsia-500; }
 @utility bg-day-15 { @apply bg-linear-to-br from-pink-400 to-pink-200 dark:from-pink-700 dark:to-pink-500; }
 @utility bg-day-16 { @apply bg-linear-to-br from-rose-400 to-rose-200 dark:from-rose-700 dark:to-rose-500; }
-@utility bg-clickable-day-0 { @apply bg-day-0 hover:bg-red-500; }
-@utility bg-clickable-day-1 { @apply bg-day-1 hover:bg-orange-500; }
-@utility bg-clickable-day-2 { @apply bg-day-2 hover:bg-amber-500; }
-@utility bg-clickable-day-3 { @apply bg-day-3 hover:bg-yellow-500; }
-@utility bg-clickable-day-4 { @apply bg-day-4 hover:bg-lime-500; }
-@utility bg-clickable-day-5 { @apply bg-day-5 hover:bg-green-500; }
-@utility bg-clickable-day-6 { @apply bg-day-6 hover:bg-emerald-500; }
-@utility bg-clickable-day-7 { @apply bg-day-7 hover:bg-teal-500; }
-@utility bg-clickable-day-8 { @apply bg-day-8 hover:bg-cyan-500; }
-@utility bg-clickable-day-9 { @apply bg-day-9 hover:bg-sky-500; }
-@utility bg-clickable-day-10 { @apply bg-day-10 hover:bg-blue-500; }
-@utility bg-clickable-day-11 { @apply bg-day-11 hover:bg-indigo-500; }
-@utility bg-clickable-day-12 { @apply bg-day-12 hover:bg-violet-500; }
-@utility bg-clickable-day-13 { @apply bg-day-13 hover:bg-purple-500; }
-@utility bg-clickable-day-14 { @apply bg-day-14 hover:bg-fuchsia-500; }
-@utility bg-clickable-day-15 { @apply bg-day-15 hover:bg-pink-500; }
-@utility bg-clickable-day-16 { @apply bg-day-16 hover:bg-rose-500; }
+@utility bg-clickable-day-base { @apply bg-size-[200%_200%] bg-top-left hover:bg-bottom-right transition-all duration-1000; }
+@utility bg-clickable-day-0 { @apply bg-day-0 bg-clickable-day-base; }
+@utility bg-clickable-day-1 { @apply bg-day-1 bg-clickable-day-base; }
+@utility bg-clickable-day-2 { @apply bg-day-2 bg-clickable-day-base; }
+@utility bg-clickable-day-3 { @apply bg-day-3 bg-clickable-day-base; }
+@utility bg-clickable-day-4 { @apply bg-day-4 bg-clickable-day-base; }
+@utility bg-clickable-day-5 { @apply bg-day-5 bg-clickable-day-base; }
+@utility bg-clickable-day-6 { @apply bg-day-6 bg-clickable-day-base; }
+@utility bg-clickable-day-7 { @apply bg-day-7 bg-clickable-day-base; }
+@utility bg-clickable-day-8 { @apply bg-day-8 bg-clickable-day-base; }
+@utility bg-clickable-day-9 { @apply bg-day-9 bg-clickable-day-base; }
+@utility bg-clickable-day-10 { @apply bg-day-10 bg-clickable-day-base; }
+@utility bg-clickable-day-11 { @apply bg-day-11 bg-clickable-day-base; }
+@utility bg-clickable-day-12 { @apply bg-day-12 bg-clickable-day-base; }
+@utility bg-clickable-day-13 { @apply bg-day-13 bg-clickable-day-base; }
+@utility bg-clickable-day-14 { @apply bg-day-14 bg-clickable-day-base; }
+@utility bg-clickable-day-15 { @apply bg-day-15 bg-clickable-day-base; }
+@utility bg-clickable-day-16 { @apply bg-day-16 bg-clickable-day-base; }
