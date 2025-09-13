@@ -133,7 +133,7 @@ task("buildCss", NpxTask::class) {
         "-o", "./src/main/resources/assets/index.min.css",
         "-m",
     )
-    inputs.dir("./src/main/resources")
-    outputs.dir("./src/main/resources/index.min.css")
+    inputs.files(fileTree("./src/main/resources") { include("*.html", "*.css") })
+    outputs.file("./src/main/resources/assets/index.min.css")
     dependsOn("npmInstall")
 }
