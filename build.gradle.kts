@@ -120,6 +120,12 @@ tasks.processResources {
     dependsOn("buildCss")
 }
 
+node {
+    val nodeBin = System.getenv("NVM_BIN")
+    npmCommand = "$nodeBin/npm"
+    npxCommand = "$nodeBin/npx"
+}
+
 task("buildCss", NpxTask::class) {
     command = "@tailwindcss/cli"
     args = listOf(
