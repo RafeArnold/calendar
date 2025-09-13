@@ -40,7 +40,7 @@ repositories {
 }
 
 dependencies {
-    implementation(platform("org.http4k:http4k-bom:6.15.1.0"))
+    implementation(platform("org.http4k:http4k-bom:6.17.0.0"))
     implementation("org.http4k:http4k-core")
     implementation("org.http4k:http4k-server-jetty")
     implementation("org.http4k:http4k-template-core")
@@ -60,7 +60,8 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-params")
     testImplementation("com.microsoft.playwright:playwright:1.55.0")
-    testImplementation("org.wiremock:wiremock-jetty12:3.13.1")
+    testImplementation("org.wiremock:wiremock:4.0.0-beta.15")
+    testRuntimeOnly("org.eclipse.jetty.ee10:jetty-ee10-servlet:12.1.1")
     testImplementation("com.auth0:java-jwt:4.5.0")
     testImplementation("org.bouncycastle:bcpkix-jdk18on:1.81")
 }
