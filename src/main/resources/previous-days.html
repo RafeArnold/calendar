@@ -1,11 +1,14 @@
+{% if model.nextPreviousDaysLink %}
+<div hx-get="{{ model.nextPreviousDaysLink }}" hx-target="#previous-days" hx-swap="beforeend" hx-trigger="revealed">
+{% endif %}
 {% for previousDay in model.previousDays %}
 <div class="mt-4 w-full aspect-7/5 flex bg-day-{{ previousDay.colorIndex }} border-2 border-black dark:border-white dark:text-white rounded-2xl shadow-2xl">
-    {% if loop.index == model.includeNextPreviousDaysLinkOnDay %}
-    <div hx-get="{{ model.nextPreviousDaysLink }}" hx-target="#previous-days" hx-swap="beforeend" hx-trigger="revealed"></div>
-    {% endif %}
     <div class="relative flex grow items-center justify-center text-center">
         <div data-testid="previous-day-date" class="absolute text-sm left-5 top-3">{{ previousDay.date }}</div>
         <div data-testid="previous-day-text" class="p-6 pt-10 sm:p-12 whitespace-pre-wrap max-[400px]:text-sm">{{ previousDay.text | raw }}</div>
     </div>
 </div>
 {% endfor %}
+{% if model.nextPreviousDaysLink %}
+</div>
+{% endif %}

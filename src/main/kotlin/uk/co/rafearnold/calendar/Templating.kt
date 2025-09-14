@@ -14,7 +14,7 @@ import java.time.format.DateTimeFormatter
 fun YearMonth.toCalendarModel(
     dayStates: List<DayState>,
     previousDays: List<PreviousDayModel>,
-    nextPreviousDaysLink: String,
+    nextPreviousDaysLink: String?,
     today: LocalDate,
     showClickMeTooltip: Boolean,
 ): CalendarBaseModel {
@@ -35,8 +35,7 @@ fun YearMonth.toCalendarModel(
         override val previousMonthDays: List<Int> = previousMonthDays()
         override val nextMonthDays: List<Int> = nextMonthDays()
         override val previousDays: List<PreviousDayModel> = previousDays
-        override val nextPreviousDaysLink: String = nextPreviousDaysLink
-        override val includeNextPreviousDaysLinkOnDay: Int = 19
+        override val nextPreviousDaysLink: String? = nextPreviousDaysLink
     }
 }
 
@@ -110,8 +109,7 @@ interface CalendarBaseModel : PreviousDaysBaseModel {
 
 interface PreviousDaysBaseModel {
     val previousDays: List<PreviousDayModel>
-    val nextPreviousDaysLink: String
-    val includeNextPreviousDaysLinkOnDay: Int
+    val nextPreviousDaysLink: String?
 }
 
 data class DayModel(
