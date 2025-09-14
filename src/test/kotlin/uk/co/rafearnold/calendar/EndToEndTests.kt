@@ -627,16 +627,15 @@ class EndToEndTests {
 
         val page = browser.newPage()
         page.navigateHome(port = server.port())
-        val previousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
-        assertEquals(20, previousDays.size)
+        page.previousDayTexts().nth(1).scrollIntoViewIfNeeded()
+        val previousDays = openedDays.take(30).map { it.toPreviousDay() }.toMutableList()
         page.assertPreviousDaysAre(previousDays)
 
-        page.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
-        previousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
-        page.assertPreviousDaysAre(previousDays)
-
-        page.previousDayTexts().nth(29).scrollIntoViewIfNeeded()
+        page.previousDayTexts().nth(25).scrollIntoViewIfNeeded()
         previousDays.addAll(openedDays.subList(30, 37).map { it.toPreviousDay() })
+        page.assertPreviousDaysAre(previousDays)
+
+        page.previousDayTexts().nth(36).scrollIntoViewIfNeeded()
         page.assertPreviousDaysAre(previousDays)
     }
 
@@ -823,11 +822,9 @@ class EndToEndTests {
                 openedDays.forEach { daysRepository.markDayAsOpened(otherUser, it) }
             }
 
-            var expectedPreviousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
+            var expectedPreviousDays = openedDays.take(30).map { it.toPreviousDay() }.toMutableList()
             otherUserPage.reload()
-            otherUserPage.assertPreviousDaysAre(expectedPreviousDays)
-            otherUserPage.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
-            expectedPreviousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
+            otherUserPage.previousDayTexts().nth(1).scrollIntoViewIfNeeded()
             otherUserPage.assertPreviousDaysAre(expectedPreviousDays)
 
             val impersonatorPage = browser.newPage()
@@ -835,10 +832,8 @@ class EndToEndTests {
             impersonatorPage.assertPreviousDaysAre(emptyList())
 
             impersonatorPage.impersonate(emailToImpersonate = otherUserEmail)
-            expectedPreviousDays = openedDays.take(20).map { it.toPreviousDay() }.toMutableList()
-            impersonatorPage.assertPreviousDaysAre(expectedPreviousDays)
-            impersonatorPage.previousDayTexts().nth(19).scrollIntoViewIfNeeded()
-            expectedPreviousDays.addAll(openedDays.subList(20, 30).map { it.toPreviousDay() })
+            expectedPreviousDays = openedDays.take(30).map { it.toPreviousDay() }.toMutableList()
+            otherUserPage.previousDayTexts().nth(1).scrollIntoViewIfNeeded()
             impersonatorPage.assertPreviousDaysAre(expectedPreviousDays)
         }
     }

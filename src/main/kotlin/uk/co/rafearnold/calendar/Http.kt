@@ -298,12 +298,12 @@ fun previousDaysRoute(
         val from = previousDaysFromQuery(request) ?: clock.toDate()
         val previousDays =
             daysRepo.getOpenedDaysDescFrom(impersonatedUser(request) ?: user(request), from = from, limit = 10)
-        val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        val nextPreviousDaysLink =
+            if (previousDays.isNotEmpty()) previousDaysLink(from = previousDays.last().minusDays(1)) else null
         val previousDaysBaseModel =
             object : PreviousDaysBaseModel {
                 override val previousDays: List<PreviousDayModel> = previousDays.toPreviousDayModels(messageLoader)
-                override val nextPreviousDaysLink: String = nextPreviousDaysLink
-                override val includeNextPreviousDaysLinkOnDay: Int = 9
+                override val nextPreviousDaysLink: String? = nextPreviousDaysLink
             }
         Response(OK).with(view of PreviousDaysViewModel(previousDaysBaseModel))
     }
@@ -325,7 +325,8 @@ class CalendarModelHelper(
         val today = clock.toDate()
         val openedDays = daysRepo.getOpenedDaysOfMonth(user, month)
         val previousDays = daysRepo.getOpenedDaysDescFrom(user, from = today, limit = 20)
-        val nextPreviousDaysLink = previousDaysLink(from = previousDays.lastOrNull()?.minusDays(1))
+        val nextPreviousDaysLink =
+            if (previousDays.isNotEmpty()) previousDaysLink(from = previousDays.last().minusDays(1)) else null
         val dayStates =
             (1..month.lengthOfMonth()).map {
                 val atDay = month.atDay(it)
@@ -359,8 +360,7 @@ private fun daysLink(month: YearMonth) = "/days?month=" + monthFormatter.format(
 
 private fun monthImageLink(month: YearMonth) = "/assets/month-images/${monthFormatter.format(month)}.jpg"
 
-private fun previousDaysLink(from: LocalDate?) =
-    "/previous-days" + if (from != null) "?from=" + from.format(DateTimeFormatter.ISO_LOCAL_DATE) else ""
+private fun previousDaysLink(from: LocalDate) = "/previous-days?from=" + from.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
 fun adminUserFilter(
     adminEmails: List<String>,
