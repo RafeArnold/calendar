@@ -21,6 +21,8 @@ plugins {
 
 group = "uk.co.rafearnold"
 
+val runningInCI: Boolean = System.getenv("CI") == "true"
+
 application.mainClass = "uk.co.rafearnold.calendar.MainKt"
 
 tasks.run<JavaExec> {
@@ -121,9 +123,11 @@ tasks.processResources {
 }
 
 node {
-    val nodeBin = System.getenv("NVM_BIN")
-    npmCommand = "$nodeBin/npm"
-    npxCommand = "$nodeBin/npx"
+    if (!runningInCI) {
+        val nodeBin = System.getenv("NVM_BIN")
+        npmCommand = "$nodeBin/npm"
+        npxCommand = "$nodeBin/npx"
+    }
 }
 
 task("buildCss", NpxTask::class) {
