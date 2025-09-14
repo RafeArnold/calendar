@@ -21,6 +21,8 @@ plugins {
 
 group = "uk.co.rafearnold"
 
+val runningInCI: Boolean = System.getenv("CI") == "true"
+
 application.mainClass = "uk.co.rafearnold.calendar.MainKt"
 
 tasks.run<JavaExec> {
@@ -120,6 +122,14 @@ tasks.processResources {
     dependsOn("buildCss")
 }
 
+node {
+    if (!runningInCI) {
+        val nodeBin = System.getenv("NVM_BIN")
+        npmCommand = "$nodeBin/npm"
+        npxCommand = "$nodeBin/npx"
+    }
+}
+
 task("buildCss", NpxTask::class) {
     command = "@tailwindcss/cli"
     args = listOf(
@@ -127,7 +137,7 @@ task("buildCss", NpxTask::class) {
         "-o", "./src/main/resources/assets/index.min.css",
         "-m",
     )
-    inputs.dir("./src/main/resources")
-    outputs.dir("./src/main/resources/index.min.css")
+    inputs.files(fileTree("./src/main/resources") { include("*.html", "*.css") })
+    outputs.file("./src/main/resources/assets/index.min.css")
     dependsOn("npmInstall")
 }
