@@ -4,7 +4,7 @@
 {% for previousDay in model.previousDays %}
 <div class="mt-4 w-full aspect-7/5 flex bg-day-{{ previousDay.colorIndex }} border-2 border-black dark:border-white dark:text-white rounded-2xl shadow-2xl">
     <div class="relative flex grow items-center justify-center text-center">
-        <div data-testid="previous-day-date" class="absolute text-sm left-5 top-3">{{ previousDay.date }}</div>
+        <div data-testid="previous-day-date" class="absolute text-xs sm:text-sm left-3 top-2 sm:left-5 sm:top-3">{{ previousDay.date }}</div>
         <div data-testid="previous-day-text" class="p-6 pt-10 sm:p-12 whitespace-pre-wrap max-[400px]:text-sm">{{ previousDay.text | raw }}</div>
     </div>
 </div>
