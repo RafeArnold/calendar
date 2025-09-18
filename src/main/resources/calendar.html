@@ -1,4 +1,4 @@
-<div id="calendar-wrapper" class="max-w-2xl mx-auto px-10 pt-5">
+<div id="calendar-wrapper" class="max-w-2xl mx-auto px-5 sm:px-10 pt-3 sm:pt-5">
     <div class="h-12 flex items-center">
         {% if model.month %}<div data-testid="month-year" class="grow m-4 text-sm dark:text-white"><span class="pr-2 text-xl">{{ model.month }}</span> {{ model.year }}</div>{% endif %}
         {% if model.todayLink %}<button data-testid="today" hx-get="{{ model.todayLink }}" hx-target="#calendar-wrapper" hx-push-url="true" hx-swap="outerHTML transition:true" class="mx-3 px-2 h-8 bg-white hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-500 text-gray-700 hover:text-black dark:text-gray-400 dark:hover:text-black border-gray-500 hover:border-black border-2 rounded-lg duration-200 ease-in-out">today</button>{% endif %}
