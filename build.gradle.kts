@@ -42,7 +42,7 @@ repositories {
 }
 
 dependencies {
-    implementation(platform("org.http4k:http4k-bom:6.18.0.1"))
+    implementation(platform("org.http4k:http4k-bom:6.18.1.0"))
     implementation("org.http4k:http4k-core")
     implementation("org.http4k:http4k-server-jetty")
     implementation("org.http4k:http4k-template-core")
