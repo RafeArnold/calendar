@@ -13,7 +13,7 @@ plugins {
     kotlin("jvm") version "2.2.21"
     id("org.jmailen.kotlinter") version "5.2.0"
     id("com.github.node-gradle.node") version "7.1.0"
-    id("org.flywaydb.flyway") version "11.16.0"
+    id("org.flywaydb.flyway") version "11.17.0"
     id("org.jooq.jooq-codegen-gradle") version "3.20.9"
     id("com.github.johnrengelman.shadow") version "8.1.1"
     application
