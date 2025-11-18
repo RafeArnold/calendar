@@ -332,8 +332,10 @@ class CalendarModelHelper(
                 val atDay = month.atDay(it)
                 when {
                     openedDays.contains(it) -> DayState.OPENED
+
                     atDay > today || atDay > latestDate || atDay < earliestDate ||
                         messageLoader[atDay] == null -> DayState.DISABLED
+
                     else -> DayState.UNOPENED
                 }
             }
