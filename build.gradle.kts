@@ -50,7 +50,7 @@ dependencies {
     implementation("io.pebbletemplates:pebble:4.0.0")
 
     implementation("org.jooq:jooq:3.20.9")
-    implementation("org.flywaydb:flyway-core:11.17.1")
+    implementation("org.flywaydb:flyway-core:11.18.0")
     implementation("org.xerial:sqlite-jdbc:3.51.0.0")
 
     implementation("com.google.api-client:google-api-client:2.8.1")
