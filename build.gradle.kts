@@ -13,7 +13,7 @@ plugins {
     kotlin("jvm") version "2.3.0"
     id("org.jmailen.kotlinter") version "5.3.0"
     id("com.github.node-gradle.node") version "7.1.0"
-    id("org.flywaydb.flyway") version "11.20.2"
+    id("org.flywaydb.flyway") version "11.20.3"
     id("org.jooq.jooq-codegen-gradle") version "3.20.10"
     id("com.github.johnrengelman.shadow") version "8.1.1"
     application
@@ -50,7 +50,7 @@ dependencies {
     implementation("io.pebbletemplates:pebble:4.0.0")
 
     implementation("org.jooq:jooq:3.20.10")
-    implementation("org.flywaydb:flyway-core:11.20.2")
+    implementation("org.flywaydb:flyway-core:11.20.3")
     implementation("org.xerial:sqlite-jdbc:3.51.1.0")
 
     implementation("com.google.api-client:google-api-client:2.8.1")
