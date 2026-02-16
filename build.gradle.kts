@@ -57,7 +57,7 @@ dependencies {
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.21.0")
 
-    implementation("ch.qos.logback:logback-classic:1.5.25")
+    implementation("ch.qos.logback:logback-classic:1.5.32")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-params")
