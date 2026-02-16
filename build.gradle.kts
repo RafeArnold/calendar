@@ -47,7 +47,7 @@ dependencies {
     implementation("org.http4k:http4k-server-jetty")
     implementation("org.http4k:http4k-template-core")
 
-    implementation("io.pebbletemplates:pebble:4.0.0")
+    implementation("io.pebbletemplates:pebble:4.1.1")
 
     implementation("org.jooq:jooq:3.20.11")
     implementation("org.flywaydb:flyway-core:11.20.3")
