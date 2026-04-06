@@ -14,7 +14,7 @@ plugins {
     id("org.jmailen.kotlinter") version "5.4.2"
     id("com.github.node-gradle.node") version "7.1.0"
     id("org.flywaydb.flyway") version "12.1.1"
-    id("org.jooq.jooq-codegen-gradle") version "3.20.11"
+    id("org.jooq.jooq-codegen-gradle") version "3.21.1"
     id("com.github.johnrengelman.shadow") version "8.1.1"
     application
 }
@@ -49,7 +49,7 @@ dependencies {
 
     implementation("io.pebbletemplates:pebble:4.0.0")
 
-    implementation("org.jooq:jooq:3.20.11")
+    implementation("org.jooq:jooq:3.21.1")
     implementation("org.flywaydb:flyway-core:12.1.0")
     implementation("org.xerial:sqlite-jdbc:3.51.3.0")
 
