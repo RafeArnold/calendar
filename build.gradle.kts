@@ -65,7 +65,7 @@ dependencies {
     testImplementation("org.wiremock:wiremock:4.0.0-beta.32")
     testRuntimeOnly("org.eclipse.jetty.ee10:jetty-ee10-servlet:12.1.8")
     testImplementation("com.auth0:java-jwt:4.5.1")
-    testImplementation("org.bouncycastle:bcpkix-jdk18on:1.83")
+    testImplementation("org.bouncycastle:bcpkix-jdk18on:1.84")
 }
 
 val dbFile: Path = Files.createTempFile("calendar", ".db")
